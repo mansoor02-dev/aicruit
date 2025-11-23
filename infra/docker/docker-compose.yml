@@ -13,6 +13,59 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: aicruit_pgadmin
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@aicruit.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+  
+  file-service:
+    build:
+      context: ../../services/file-service
+    container_name: aicruit_file_service
+    ports:
+      - "8005:8005"
+    volumes:
+      - ../../services/file-service/uploads:/app/uploads
+    environment:
+      DB_NAME: aicruit
+      DB_USER: admin
+      DB_PASS: admin123
+      DB_HOST: postgres
+      DB_PORT: 5432
+    depends_on:
+      - postgres
+
+  db-init:
+    build:
+      context: ../../database
+      dockerfile: Dockerfile
+    container_name: aicruit_db_init
+    environment:
+      DB_NAME: aicruit
+      DB_USER: admin
+      DB_PASS: admin123
+      DB_HOST: postgres
+      DB_PORT: 5432
+    depends_on:
+      - postgres
+    restart: "no"
+    # Keep schema available inside container (optional: the image copies it already)
+    volumes:
+      - ../../database/schema.sql:/app/schema.sql:ro
 
 volumes:
   pgdata:
