@@ -54,20 +54,12 @@ declare global {
 
 // Application types
 export interface ParsedResumeData {
-  id?: string;
+  id: string;
   name?: string;
   email?: string;
   skills?: string[];
   experience?: string;
   [key: string]: unknown;
-}
-
-// Backend API response types
-export interface UploadFileResponse {
-  status: string;
-  file_url: string;
-  message: string;
-  id: string;
 }
 
 export interface Question {

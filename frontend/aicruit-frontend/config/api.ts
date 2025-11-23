@@ -3,15 +3,16 @@
 
 export const API_CONFIG = {
   // Base URL for your backend API
-  // File service runs on port 8005
+  // For development: 'http://localhost:8000' or your backend URL
   // For production: your production API URL
   BASE_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8005',
   
   // API Endpoints
   ENDPOINTS: {
     UPLOAD_RESUME: '/upload-file',
-    START_INTERVIEW: '/api/start-interview',
-    SUBMIT_ANSWER: '/api/submit-answer',
+    PARSE_RESUME: '/parse-resume',
+    START_INTERVIEW: '/start-interview',
+    SUBMIT_ANSWER: '/submit-answer',
   },
 } as const;
 
@@ -19,4 +20,7 @@ export const API_CONFIG = {
 export function getApiUrl(endpoint: string): string {
   return `${API_CONFIG.BASE_URL}${endpoint}`;
 }
+
+// Optional parser URL can be set via NEXT_PUBLIC_PARSER_URL for external parser services
+export const PARSER_URL = process.env.NEXT_PUBLIC_PARSER_URL || '';
 
