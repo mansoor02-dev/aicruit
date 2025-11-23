@@ -3,13 +3,13 @@
 
 export const API_CONFIG = {
   // Base URL for your backend API
-  // For development: 'http://localhost:8000' or your backend URL
+  // File service runs on port 8005
   // For production: your production API URL
-  BASE_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
+  BASE_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8005',
   
   // API Endpoints
   ENDPOINTS: {
-    UPLOAD_RESUME: '/api/upload-resume',
+    UPLOAD_RESUME: '/upload-file',
     START_INTERVIEW: '/api/start-interview',
     SUBMIT_ANSWER: '/api/submit-answer',
   },

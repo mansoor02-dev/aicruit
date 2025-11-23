@@ -3,8 +3,8 @@ AIcruit - Interview Page (Frontend)
 
 This Next.js / React component implements a single-page interview flow:
 - Drag & drop resume upload (PDF/DOCX)
-- Sends resume to backend: POST /api/upload-resume
-- Receives parsed resume confirmation
+- Sends resume to backend: POST /upload-file?file_type=resume
+- Receives file upload confirmation with file_url
 - Fetches/receives adaptive questions from backend: POST /api/start-interview
 - Displays one question at a time with 60s timer
 - Speech-to-text using Web Speech API (SpeechRecognition) with fallback instructions
@@ -21,6 +21,7 @@ import type {
   Question, 
   InterviewResponse, 
   SubmitAnswerPayload,
+  UploadFileResponse,
   ISpeechRecognition,
   ISpeechRecognitionEvent,
   ISpeechRecognitionErrorEvent
@@ -66,27 +67,50 @@ export default function InterviewPage() {
   }
 
   async function uploadResume() {
-    if (!resumeFile) return;
-    setUploadStatus('uploading');
-    try {
-      const form = new FormData();
-      form.append('file', resumeFile);
-      form.append('file_type', "resume");
-      const res = await fetch(getApiUrl(API_CONFIG.ENDPOINTS.UPLOAD_RESUME), {
-        method: 'POST',
-        body: form,
-      });
-      if (!res.ok) throw new Error('Upload failed');
-      const data: ParsedResumeData = await res.json();
-      setParsedData(data);
-      setUploadStatus('success');
-      setInterviewState('ready');
-    } catch (err) {
-      console.error(err);
-      setUploadStatus('error');
-      setErrorMsg(err instanceof Error ? err.message : 'Upload failed');
+  if (!resumeFile) return;
+
+  setUploadStatus("uploading");
+  setErrorMsg(null);
+
+  try {
+    const form = new FormData();
+    form.append("file", resumeFile);
+
+    // API expects file_type as query parameter
+    const url = `${getApiUrl(API_CONFIG.ENDPOINTS.UPLOAD_RESUME)}?file_type=resume`;
+
+    const res = await fetch(url, {
+      method: "POST",
+      body: form,
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => null);
+      throw new Error(errData?.message || "File upload failed");
     }
+
+    const data: UploadFileResponse = await res.json();
+
+    // API already returns `id` so no need to extract from file_url
+    const fileId = data.id;
+
+    setParsedData({
+      id: fileId,
+      file_url: data.file_url,
+      status: data.status,
+      message: data.message
+    });
+
+    setUploadStatus("success");
+    setInterviewState("ready");
+
+  } catch (err) {
+    console.error(err);
+    setUploadStatus("error");
+    setErrorMsg(err instanceof Error ? err.message : "Upload failed");
   }
+}
+
 
   // Start interview: request questions from backend using parsedData (or resume file id)
   async function startInterview() {

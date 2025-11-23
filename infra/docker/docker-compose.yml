@@ -14,5 +14,34 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
 
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: aicruit_pgadmin
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@aicruit.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+  
+  file-service:
+    build:
+      context: ../../services/file-service
+    container_name: aicruit_file_service
+    ports:
+      - "8005:8005"
+    volumes:
+      - ../../services/file-service/uploads:/app/uploads
+    environment:
+      DB_NAME: aicruit
+      DB_USER: admin
+      DB_PASS: admin123
+      DB_HOST: postgres
+      DB_PORT: 5432
+    depends_on:
+      - postgres
+
 volumes:
   pgdata:
