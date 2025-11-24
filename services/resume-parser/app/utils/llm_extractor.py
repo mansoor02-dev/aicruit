@@ -1,12 +1,15 @@
 import json
-import pydantic
 import os
-from llm_extract_instruction import get_schema_description
+from typing import Optional
+import google.generativeai as genai
+from .llm_instruction import get_schema_description
+from dotenv import load_dotenv
 
+load_dotenv('.env')  # Loads .env file automatically
 
 def extract_resume_with_llm(
     cleaned_text: str,
-    model_name: str = "gemini-2.0-flash-exp",
+    model_name: str = "gemini-2.5-flash",
     api_key: Optional[str] = None
 ) -> dict:
     """
@@ -24,8 +27,8 @@ def extract_resume_with_llm(
     # Configure API
     if api_key:
         genai.configure(api_key=api_key)
-    elif 'GOOGLE_API_KEY' in os.environ:
-        genai.configure(api_key=os.environ['GOOGLE_API_KEY'])
+    elif os.getenv('GOOGLE_API_KEY'):
+        genai.configure(api_key=os.getenv('GOOGLE_API_KEY'))
     else:
         raise ValueError("No API key provided. Set GOOGLE_API_KEY or pass api_key parameter")
     
@@ -62,3 +65,4 @@ Extract the information and return ONLY the JSON object (no markdown, no explana
         print(f"❌ JSON parsing failed: {e}")
         print(f"Response was:\n{response_text[:500]}...")
         raise
+

@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS candidates (
 -- ============================
 CREATE TABLE IF NOT EXISTS resumes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    candidate_id UUID REFERENCES candidates(id) ON DELETE CASCADE,
+    -- candidate_id UUID REFERENCES candidates(id) ON DELETE CASCADE,
     original_file_url TEXT NOT NULL,
     parsed_json JSONB NOT NULL,
     parse_status VARCHAR(20) DEFAULT 'success',

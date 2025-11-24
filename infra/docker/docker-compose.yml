@@ -67,5 +67,25 @@ services:
     volumes:
       - ../../database/schema.sql:/app/schema.sql:ro
 
+  resume-parser:
+    build:
+      context: ../../services/resume-parser
+    container_name: aicruit_resume-parser
+    ports:
+      - "8006:8006"
+    env_file:
+      - ../../services/resume-parser/app/.env
+    environment:
+      DB_NAME: aicruit
+      DB_USER: admin
+      DB_PASS: admin123
+      DB_HOST: postgres
+      DB_PORT: 5432
+      FILE_SERVICE_URL: http://aicruit_file_service:8005
+      FRONTEND_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+    depends_on:
+      - postgres
+      - file-service
+
 volumes:
   pgdata:

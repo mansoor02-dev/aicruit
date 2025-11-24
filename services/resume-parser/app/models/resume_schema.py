@@ -1,4 +1,6 @@
 from pydantic import BaseModel, Field, field_validator
+from typing import Optional, List, Literal
+from datetime import datetime
 
 # ============================================================================
 # PYDANTIC SCHEMA - Structured Resume Data Model
@@ -91,3 +93,4 @@ class StructuredResume(BaseModel):
     # Metadata
     extraction_date: str = Field(default_factory=lambda: datetime.now().isoformat())
     source_file: Optional[str] = None
+

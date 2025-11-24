@@ -1,10 +1,12 @@
 import os
+from typing import Optional
 import fitz
 from pdf2image import convert_from_path
 import pytesseract
 import docx
 
-def extract_text_from_pdf(pdf_path: str) -> str:
+
+def extract_text_from_pdf(pdf_path: str) -> Optional[str]:
     """Extract text from PDF using PyMuPDF"""
     try:
         doc = fitz.open(pdf_path)
@@ -23,8 +25,8 @@ def extract_text_from_pdf(pdf_path: str) -> str:
         return None
 
 
-# For OCR (Images)
-def extract_text_pdf_ocr(pdf_path: str) -> str:
+def extract_text_pdf_ocr(pdf_path: str) -> Optional[str]:
+    """Extract text from PDF using OCR (for image-based PDFs)"""
     try:
         images = convert_from_path(pdf_path)
         text = ""
@@ -32,35 +34,48 @@ def extract_text_pdf_ocr(pdf_path: str) -> str:
             text += pytesseract.image_to_string(img)
         return text.strip()
     except Exception as e:
-        print(f"❌ Error reading PDF: {e}")
+        print(f"❌ Error reading PDF with OCR: {e}")
         return None
 
-# For Documents
-def extract_text_docx(pdf_path: str) -> str:
+
+def extract_text_docx(docx_path: str) -> Optional[str]:
+    """Extract text from DOCX file"""
     try:
-        doc = docx.Document(pdf_path)
+        doc = docx.Document(docx_path)
         return "\n".join([p.text for p in doc.paragraphs]).strip()
     except Exception as e:
-        print(f"❌ Error reading PDF: {e}")
+        print(f"❌ Error reading DOCX: {e}")
         return None
+
+
+def extract_from_file(file_path: str) -> Optional[str]:
+    """
+    Extract text from PDF or DOCX file
     
-def extract_from_pdf(pdf_path: str) -> str:
-    filename = os.path.basename(pdf_path)
+    Args:
+        file_path: Path to the file
+    
+    Returns:
+        str: Extracted text or None if failed
+    """
+    filename = os.path.basename(file_path)
     try: 
         # For PDF
         if filename.lower().endswith(".pdf"):
-            text = extract_text_from_pdf(pdf_path)
+            text = extract_text_from_pdf(file_path)
             
-            # For OCR
+            # Fallback to OCR if text extraction failed or too short
             if not text or len(text.strip()) < 30:
-                text = extract_text_pdf_ocr(pdf_path)
+                text = extract_text_pdf_ocr(file_path)
         
-        # For Document    
+        # For DOCX    
         elif filename.lower().endswith(".docx"):
-            text = extract_text_docx(pdf_path)
-
+            text = extract_text_docx(file_path)
+        else:
+            raise ValueError(f"Unsupported file type: {filename}")
+        
         return text
     except Exception as e:
-        print(f"❌ Error reading PDF: {e}")
+        print(f"❌ Error reading file: {e}")
         return None
-        
+
