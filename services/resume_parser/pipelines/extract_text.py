@@ -4,7 +4,7 @@ from pdf2image import convert_from_path
 import pytesseract
 import docx
 
-def extract_text_from_pdf(pdf_path: str) -> str:
+def extract_text_pdf(pdf_path: str) -> str:
     """Extract text from PDF using PyMuPDF"""
     try:
         doc = fitz.open(pdf_path)
@@ -43,24 +43,5 @@ def extract_text_docx(pdf_path: str) -> str:
     except Exception as e:
         print(f"❌ Error reading PDF: {e}")
         return None
-    
-def extract_from_pdf(pdf_path: str) -> str:
-    filename = os.path.basename(pdf_path)
-    try: 
-        # For PDF
-        if filename.lower().endswith(".pdf"):
-            text = extract_text_from_pdf(pdf_path)
-            
-            # For OCR
-            if not text or len(text.strip()) < 30:
-                text = extract_text_pdf_ocr(pdf_path)
-        
-        # For Document    
-        elif filename.lower().endswith(".docx"):
-            text = extract_text_docx(pdf_path)
 
-        return text
-    except Exception as e:
-        print(f"❌ Error reading PDF: {e}")
-        return None
         

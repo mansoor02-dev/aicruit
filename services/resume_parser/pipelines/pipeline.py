@@ -1,7 +1,8 @@
 import pydantic
 import json
-from extract_text import extract_from_pdf
-from preprocess_text import clean_text
+import os
+from utils.preprocessing import preprocess_resume 
+from utils.cleaner import clean_text
 from llm_extracter import extract_resume_with_llm
 from models.resume_schema import StructuredResume
 
@@ -28,16 +29,11 @@ def process_resume(
     
     # Step 1: Extract text
     print("\n1️⃣ Extracting text from PDF...")
-    raw_text = extract_from_pdf(pdf_path)
-    if not raw_text:
+    _ , cleaned_text = preprocess_resume(pdf_path)
+    if not cleaned_text:
         raise ValueError("Failed to extract text from PDF")
     
-    print(f"   ✅ Extracted {len(raw_text)} characters")
-    
-    # Step 2: Clean text
-    print("\n2️⃣ Cleaning and normalizing text...")
-    cleaned_text = clean_text(raw_text)
-    print(f"   ✅ Cleaned: {len(cleaned_text)} chars (removed {len(raw_text) - len(cleaned_text)} chars)")
+    print(f"   ✅ Extracted {len(cleaned_text)} characters")
     
     # Step 3: Extract with LLM
     print("\n3️⃣ Extracting structured data with LLM...")

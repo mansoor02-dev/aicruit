@@ -1,5 +1,8 @@
 import re
+import os
 import unicodedata
+from langdetect import detect
+
 # ============================================================================
 # TEXT PREPROCESSING - From your existing code
 # ============================================================================
@@ -51,7 +54,6 @@ def clean_text(text: str) -> str:
     
     return text.strip()
 
-def normalize_text(text: str) -> str:
-    
-    return None
+
+
     

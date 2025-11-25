@@ -90,6 +90,40 @@ CREATE TABLE IF NOT EXISTS interview_responses (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
+
+-- ============================
+-- INTERVIEW Turns
+-- ============================
+-- Add to your existing schema.sql (or run separately)
+
+-- Link between your old interviews and our AI session
+CREATE TABLE IF NOT EXISTS ai_interview_sessions (
+    id SERIAL PRIMARY KEY,
+    interview_id UUID NOT NULL REFERENCES interviews(id) ON DELETE CASCADE,
+    session_id TEXT UNIQUE NOT NULL,           -- our short 8-char session ID
+    resume_id UUID NOT NULL,                   -- from resumes table
+    job_description TEXT NOT NULL,
+    status TEXT DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT NOW(),
+    ended_at TIMESTAMP
+);
+
+-- Store every question + answer
+CREATE TABLE IF NOT EXISTS ai_interview_turns (
+    id SERIAL PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES ai_interview_sessions(session_id) ON DELETE CASCADE,
+    turn_number INT NOT NULL,
+    question TEXT NOT NULL,
+    user_answer TEXT,
+    is_followup BOOLEAN DEFAULT FALSE,
+    topic TEXT,
+    depth_score NUMERIC(4,3),
+    pass BOOLEAN,
+    confidence NUMERIC(4,3),
+    feedback TEXT,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
 -- ============================
 -- CHEATING EVENTS
 -- ============================
