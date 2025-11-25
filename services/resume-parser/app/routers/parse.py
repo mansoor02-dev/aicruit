@@ -13,7 +13,7 @@ router = APIRouter()
 
 @router.post("/parse-resume", response_model=ParseResumeResponse)
 async def parse_resume(request: ParseResumeRequest):
-    """
+    """     
     Parse resume from URL and save to database
     
     Args:
