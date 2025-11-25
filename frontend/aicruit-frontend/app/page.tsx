@@ -41,6 +41,7 @@ export default function InterviewPage() {
 
   // Error state management
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [jobDescription, setJobDescription] = useState<string>('');
 
   // Interview hook
   const {
@@ -54,6 +55,7 @@ export default function InterviewPage() {
     setReady,
   } = useInterview({
     parsedData,
+    jobDescription,
     onError: setErrorMsg,
   });
 
@@ -143,6 +145,8 @@ export default function InterviewPage() {
           interviewState={interviewState}
           currentIndex={currentIndex}
           totalQuestions={questions.length}
+          jobDescription={jobDescription}
+          onJobDescriptionChange={setJobDescription}
           onStartInterview={handleStartInterview}
         />
 
