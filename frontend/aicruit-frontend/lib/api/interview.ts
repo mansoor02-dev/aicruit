@@ -3,13 +3,14 @@ import type { InterviewResponse, SubmitAnswerPayload } from '@/types';
 /**
  * Starts an interview session and fetches initial questions
  * @param resumeId - The ID of the parsed resume
+ * @param jobDescription - The job description provided by the user
  * @returns Promise with interview response containing questions
  */
-export async function startInterview(resumeId: string | null): Promise<InterviewResponse> {
+export async function startInterview(resumeId: string | null, jobDescription: string = ''): Promise<InterviewResponse> {
   const res = await fetch('/api/start-interview', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ resumeId }),
+    body: JSON.stringify({ resumeId, jobDescription }),
   });
 
   if (!res.ok) {
