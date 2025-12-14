@@ -1,11 +1,16 @@
 import re
 import os
 import unicodedata
+<<<<<<<< HEAD:services/resume-parser/app/utils/cleaner.py
 from langdetect import detect
 
 # ============================================================================
 # TEXT PREPROCESSING - From your existing code
 # ============================================================================
+========
+from typing import Optional
+
+>>>>>>>> 8d39c8e743a34e517f851bdcf472e3205b61209f:services/resume-parser/app/utils/text_preprocessor.py
 
 # Precompile regex patterns
 REGEX_CONTROL = re.compile(r'[\x00-\x1F\x7F]')
@@ -17,7 +22,7 @@ REGEX_MULTI_NEWLINES = re.compile(r'\n{2,}')
 
 MOJIBAKE_REPLACEMENTS = {
     'â€"': '-', 'â€"': '-', 'â€': '-',
-    'â€™': "'", 'â€œ': '"', 'â€�': '"',
+    'â€™': "'", 'â€œ': '"', 'â€': '"',
     'â€˜': "'", 'â€¢': '•', 'â€¦': '...',
     '\ufffd': '',
 }
@@ -54,6 +59,9 @@ def clean_text(text: str) -> str:
     
     return text.strip()
 
+<<<<<<<< HEAD:services/resume-parser/app/utils/cleaner.py
 
 
     
+========
+>>>>>>>> 8d39c8e743a34e517f851bdcf472e3205b61209f:services/resume-parser/app/utils/text_preprocessor.py
