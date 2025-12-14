@@ -31,6 +31,8 @@ services:
       - "5050:80"
     depends_on:
       - postgres
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
   
   file-service:
     build:
@@ -83,9 +85,56 @@ services:
       DB_PORT: 5432
       FILE_SERVICE_URL: http://aicruit_file_service:8005
       FRONTEND_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      DATABASE_URL: postgresql+psycopg2://admin:admin123@postgres:5432/aicruit
     depends_on:
       - postgres
       - file-service
+    volumes:
+      - ../../services/resume-parser/parsed:/app/parsed
+  backend-router:
+    image: aicruit/api-gateway:local
+    build:
+      context: ../../gateway
+    container_name: aicruit_backend_router
+    ports:
+      - "8000:8000"
+    env_file:
+      - ../../gateway/.env
+    environment:
+      RESUME_PARSER_URL: http://aicruit_resume-parser:8006
+      FILE_SERVICE_URL: http://aicruit_file_service:8005
+      DB_NAME: aicruit
+      DB_USER: admin
+      DB_PASS: admin123
+      DB_HOST: postgres
+      DB_PORT: 5432
+    volumes:
+      # Mount host AWS credentials into container so the gateway can access AWS configs
+      - ${HOME}/.aws:/root/.aws:ro
+    depends_on:
+      - postgres
+      - resume-parser
+      - file-service
+
+  # audio-transcribe:
+  #   build:
+  #     context: ../../services/transcribe-audio
+  #   container_name: aicruit_audio_transcribe
+  #   ports:
+  #     - "8007:8007"
+  #   env_file:
+  #     - ../../services/transcribe-audio/app/.env
+  #   environment:
+  #     UPLOAD_DIR: /tmp/uploads
+  #     PY_WHISPER_MODEL: small
+  #     FRONTEND_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+  #   volumes:
+  #     - ../../services/transcribe-audio/models:/app/models
+  #     - ../../services/transcribe-audio/Release:/app/Release
+  #   depends_on:
+  #     - file-service
+  #   restart: always
 
 volumes:
   pgdata:
+  pgadmin_data:

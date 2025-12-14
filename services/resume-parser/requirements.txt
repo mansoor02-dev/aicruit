@@ -11,4 +11,5 @@ pytesseract
 python-docx
 google-generativeai
 Pillow
+SQLAlchemy
 

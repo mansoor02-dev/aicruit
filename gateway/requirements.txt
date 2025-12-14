@@ -1,0 +1,9 @@
+boto3
+fastapi
+uvicorn
+pydantic-settings
+SQLAlchemy
+python-dotenv
+passlib[bcrypt]
+psycopg2-binary
+python-jose[cryptography]

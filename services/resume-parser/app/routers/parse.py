@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 from typing import Optional
 from ..models.api_models import ParseResumeRequest, ParseResumeResponse
 from ..utils.pipeline import process_resume_from_url
-from ..utils.db import get_db_connection
+from ..utils.db import get_db_session, Resume
 from dotenv import load_dotenv
 
 load_dotenv('.env')
@@ -40,54 +40,44 @@ async def parse_resume(request: ParseResumeRequest):
         
         # Convert to JSON for database storage
         parsed_json = json.dumps(structured_resume.model_dump(), default=str)
+
+        # Prepare parsed files directory (configurable)
+        parsed_dir = os.getenv("PARSED_DIR",
+                       os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'parsed')))
+        os.makedirs(parsed_dir, exist_ok=True)
         
-        # Save to database
-        conn = get_db_connection()
-        cur = conn.cursor()
-        
+        # Save to database using SQLAlchemy ORM
+        session = get_db_session()
         try:
-            # Insert into resumes table
-            insert_sql = """
-                INSERT INTO resumes (original_file_url, parsed_json, parse_status)
-                VALUES (%s, %s, %s)
-                RETURNING id
-            """
-            
-            cur.execute(
-                insert_sql,
-                (
-                    request.pdf_url,
-                    parsed_json,
-                    'success'
-                )
+            resume_row = Resume(
+                original_file_url=request.pdf_url,
+                parsed_json=parsed_json,
+                parse_status='success'
             )
-            
-            result = cur.fetchone()
-            conn.commit()
-            
-            if not result or not result[0]:
-                raise HTTPException(
-                    status_code=500,
-                    detail="Failed to save resume to database"
-                )
-            
-            resume_id = str(result[0])
-            
+            session.add(resume_row)
+            session.commit()
+            session.refresh(resume_row)
+
+            resume_id = str(resume_row.id)
+
+            # Save parsed JSON to file so it's visible on host
+            try:
+                parsed_filename = f"resume_{resume_id}.json"
+                parsed_path = os.path.join(parsed_dir, parsed_filename)
+                with open(parsed_path, "w", encoding="utf-8") as pf:
+                    pf.write(parsed_json)
+            except Exception as file_err:
+                print(f"Warning: failed to write parsed file for resume {resume_id}: {file_err}")
+
             return ParseResumeResponse(
                 id=resume_id,
                 message="Resume parsed and saved successfully"
             )
-        
         except Exception as db_error:
-            conn.rollback()
-            raise HTTPException(
-                status_code=500,
-                detail=f"Database error: {str(db_error)}"
-            )
-        
+            session.rollback()
+            raise HTTPException(status_code=500, detail=f"Database error: {str(db_error)}")
         finally:
-            cur.close()
-            conn.close()
+            session.close()
     
     except HTTPException:
         raise
