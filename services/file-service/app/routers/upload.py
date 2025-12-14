@@ -2,7 +2,7 @@ from fastapi import APIRouter, UploadFile, File, HTTPException
 import os
 import uuid
 from datetime import datetime
-from ..db import get_db_connection
+from ..db import get_db_session, FileUpload
 from ..models import FileUploadResponse
 
 router = APIRouter()
@@ -34,19 +34,21 @@ async def upload_file(file: UploadFile = File(...), file_type: str = "other"):
         file_url = f"/static/{file_type}/{filename}"
 
         # Insert file metadata into database and return id
-        conn = get_db_connection()
-        cur = conn.cursor()
-        insert_sql = (
-            "INSERT INTO file_uploads (file_type, file_url, original_filename, mime_type, size)"
-            " VALUES (%s, %s, %s, %s, %s) RETURNING id"
-        )
-        cur.execute(insert_sql, (file_type, file_url, file.filename, file.content_type, size))
-        returned = cur.fetchone()
-        conn.commit()
-        cur.close()
-        conn.close()
-
-        file_id = str(returned[0]) if returned and returned[0] is not None else None
+        session = get_db_session()
+        try:
+            file_row = FileUpload(
+                file_type=file_type,
+                file_url=file_url,
+                original_filename=file.filename,
+                mime_type=file.content_type,
+                size=size,
+            )
+            session.add(file_row)
+            session.commit()
+            session.refresh(file_row)
+            file_id = str(file_row.id) if file_row.id is not None else None
+        finally:
+            session.close()
 
         return {
             "status": "success",

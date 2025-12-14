@@ -6,6 +6,7 @@ type InterviewState = 'idle' | 'ready' | 'running' | 'finished';
 
 interface UseInterviewOptions {
   parsedData: ParsedResumeData | null;
+  jobDescription?: string;
   onError?: (error: string) => void;
 }
 
@@ -14,7 +15,7 @@ interface UseInterviewOptions {
  * @param options - Interview configuration
  * @returns Interview state and controls
  */
-export function useInterview({ parsedData, onError }: UseInterviewOptions) {
+export function useInterview({ parsedData, jobDescription = '', onError }: UseInterviewOptions) {
   const [interviewState, setInterviewState] = useState<InterviewState>('idle');
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -26,7 +27,7 @@ export function useInterview({ parsedData, onError }: UseInterviewOptions) {
     setProcessingAnswer(false);
 
     try {
-      const payload = await startInterview(parsedData?.id || null);
+      const payload = await startInterview(parsedData?.id || null, jobDescription);
       const qs = payload.questions || [];
       setQuestions(qs);
       setCurrentIndex(0);
@@ -37,7 +38,7 @@ export function useInterview({ parsedData, onError }: UseInterviewOptions) {
       onError?.(errorMsg);
       setInterviewState('idle');
     }
-  }, [parsedData, onError]);
+  }, [parsedData, jobDescription, onError]);
 
   const handleSubmitAnswer = useCallback(
     async (answerText: string) => {

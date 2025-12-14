@@ -66,7 +66,7 @@ export function useResumeUpload() {
       const rawFileUrl = (parsedData as any).file_url || (parsedData as any).fileUrl || '';
       let absoluteFileUrl = rawFileUrl;
       if (rawFileUrl && rawFileUrl.startsWith('/')) {
-        absoluteFileUrl = `${API_CONFIG.BASE_URL}${rawFileUrl}`;
+        absoluteFileUrl = `${rawFileUrl}`;
       }
 
       const parsed = await parseResume(parsedData.id, parserUrl, absoluteFileUrl);

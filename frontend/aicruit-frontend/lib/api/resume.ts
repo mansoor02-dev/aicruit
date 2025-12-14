@@ -1,5 +1,5 @@
 import type { ParsedResumeData } from '@/types';
-import { getApiUrl, API_CONFIG, PARSER_URL } from '@/config/api';
+import { getApiUrl,getApiUrl2, API_CONFIG, PARSER_URL } from '@/config/api';
 
 /**
  * Uploads a resume file to the backend
@@ -41,11 +41,11 @@ export async function uploadResume(file: File): Promise<ParsedResumeData> {
 export async function parseResume(id: string, parserUrl?: string, fileUrl?: string): Promise<ParsedResumeData> {
   // If caller doesn't specify a parserUrl, use the configured endpoint on our backend
   // Priority: explicit parserUrl passed to the helper -> PARSER_URL env var -> configured backend parse endpoint
-  const url = parserUrl || PARSER_URL || getApiUrl(API_CONFIG.ENDPOINTS.PARSE_RESUME);
+  const url = getApiUrl2(API_CONFIG.ENDPOINTS.PARSE_RESUME);
 
-  const body: any = { resumeId: id };
-  if (fileUrl) body.fileUrl = fileUrl;
-
+  const body: any = { id: id };
+  if (fileUrl) body.pdf_url = fileUrl;
+  console.log("Parsing resume with body:", body);
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

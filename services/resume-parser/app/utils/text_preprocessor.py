@@ -1,8 +1,7 @@
 import re
 import unicodedata
-# ============================================================================
-# TEXT PREPROCESSING - From your existing code
-# ============================================================================
+from typing import Optional
+
 
 # Precompile regex patterns
 REGEX_CONTROL = re.compile(r'[\x00-\x1F\x7F]')
@@ -14,7 +13,7 @@ REGEX_MULTI_NEWLINES = re.compile(r'\n{2,}')
 
 MOJIBAKE_REPLACEMENTS = {
     'â€"': '-', 'â€"': '-', 'â€': '-',
-    'â€™': "'", 'â€œ': '"', 'â€�': '"',
+    'â€™': "'", 'â€œ': '"', 'â€': '"',
     'â€˜': "'", 'â€¢': '•', 'â€¦': '...',
     '\ufffd': '',
 }
@@ -51,7 +50,3 @@ def clean_text(text: str) -> str:
     
     return text.strip()
 
-def normalize_text(text: str) -> str:
-    
-    return None
-    
