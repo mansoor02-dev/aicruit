@@ -210,4 +210,3 @@ def refresh_token(data: RefreshTokenRequest):
         return cognito_response
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    

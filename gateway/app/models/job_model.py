@@ -31,6 +31,7 @@ class JobModel(Base):
     salary_min = Column(Integer, nullable=True)
     salary_max = Column(Integer, nullable=True)
     status = Column(String(20), default="OPEN")   # OPEN, CLOSED
+    last_date_to_apply = Column(DateTime, nullable=True)
     
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
@@ -39,6 +40,4 @@ class JobModel(Base):
     # We use string names "CompanyModel" to avoid circular import errors
     company = relationship("CompanyModel", back_populates="jobs")
     recruiter = relationship("RecruiterModel", back_populates="jobs")
-    
-    # Future proofing: You will add this later for candidates
-    # applications = relationship("ApplicationModel", back_populates="job")
+    applications = relationship("ApplicationModel", back_populates="job", cascade="all, delete-orphan")
