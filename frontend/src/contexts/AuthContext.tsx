@@ -64,9 +64,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } else {
         const error = await response.json();
         if (error.detail && (error.detail.includes('UserNotConfirmedException') || error.detail.includes('Email not verified'))) {
-          // Redirect to OTP
-          window.location.href = `/otp?email=${encodeURIComponent(email)}&role=${role}`;
-          throw new Error('Please verify your email first');
+          // Do not redirect automatically on login; surface message so user can choose to verify
+          throw new Error('Email not verified. Please complete OTP verification.');
         }
         throw new Error(error.detail || 'Login failed');
       }
@@ -77,19 +76,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signup = async (email: string, password: string, name: string, role: UserRole, phone?: string, companyName?: string) => {
     try {
+      const requestBody: any = {
+        name,
+        email,
+        password,
+        role,
+      };
+
+      // Add phone for both recruiters and candidates
+      requestBody.phone = phone;
+
+      // Only add company_name for recruiters
+      if (role === 'RECRUITER') {
+        requestBody.company_name = companyName;
+      }
+
       const response = await fetch('http://localhost:8000/auth/signup', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          name,
-          email,
-          password,
-          role,
-          phone: role === 'RECRUITER' ? phone : undefined,
-          company_name: role === 'RECRUITER' ? companyName : undefined,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (response.ok) {
