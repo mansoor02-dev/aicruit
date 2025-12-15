@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     salary_min INT,
     salary_max INT,
     status VARCHAR(20) DEFAULT 'OPEN' CHECK (status IN ('OPEN','CLOSED','DRAFT')),
+    last_date_to_apply TIMESTAMP,
     
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
