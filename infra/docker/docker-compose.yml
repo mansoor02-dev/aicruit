@@ -110,7 +110,8 @@ services:
       DB_PORT: 5432
     volumes:
       # Mount host AWS credentials into container so the gateway can access AWS configs
-      - ${HOME}/.aws:/root/.aws:ro
+      # Use USERPROFILE for Windows hosts; Docker will expand it
+      - ${USERPROFILE}/.aws:/root/.aws:ro
     depends_on:
       - postgres
       - resume-parser

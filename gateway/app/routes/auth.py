@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException,Depends
 import boto3
+from botocore.exceptions import NoCredentialsError
 from app.helper.auth_helper import get_secret_hash
 from ..core.db import get_db_session
 from ..models.user import UserModel
@@ -17,19 +18,54 @@ secret_keys = SecretKeys()
 COGNITO_CLIENT_ID = secret_keys.COGNITO_CLIENT_ID
 COGNITO_CLIENT_SECRET = secret_keys.COGNITO_CLIENT_SECRET
 REGION_NAME = secret_keys.REGION_NAME
-
+USER_POOL_ID = secret_keys.USER_POOL_ID
 
 cognito_client = boto3.client("cognito-idp", region_name=REGION_NAME)
 
 
 @router.post("/auth/signup")
-def signup_user(data: SignupRequest,db:Session = Depends(get_db_session)):
-    
-    if data.role not in ['RECRUITER', 'CANDIDATE']:
+def signup_user(data: SignupRequest, db: Session = Depends(get_db_session)):
+
+    if data.role not in ["RECRUITER", "CANDIDATE"]:
         raise HTTPException(status_code=400, detail="Invalid role. Must be RECRUITER or CANDIDATE")
-    
-    secret_hash = get_secret_hash(data.email,COGNITO_CLIENT_ID, COGNITO_CLIENT_SECRET)
+
+    # 1) Create DB records first (without Cognito sub)
     try:
+        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+        # hashed_password = pwd_context.hash(data.password)
+
+        new_user = UserModel(
+            full_name=data.name,
+            email=data.email,
+            # password_hash=hashed_password,
+            role=data.role,
+            email_verified=False,
+        )
+        db.add(new_user)
+        db.flush()  # Get user.id for related models
+
+        if data.role == "RECRUITER":
+            company_name = data.company_name if data.company_name else f"{data.name}'s Company"
+            new_company = CompanyModel(name=company_name)
+            db.add(new_company)
+            db.flush()  # Get company.id
+
+            new_recruiter = RecruiterModel(
+                id=new_user.id,
+                company_id=new_company.id,
+                is_admin=True,
+            )
+            db.add(new_recruiter)
+
+        elif data.role == "CANDIDATE":
+            new_candidate = CandidateModel(
+                id=new_user.id,
+                phone=data.phone,
+            )
+            db.add(new_candidate)
+
+        # 2) Create Cognito account
+        secret_hash = get_secret_hash(data.email, COGNITO_CLIENT_ID, COGNITO_CLIENT_SECRET)
         cognito_response = cognito_client.sign_up(
             ClientId=COGNITO_CLIENT_ID,
             Username=data.email,
@@ -42,62 +78,23 @@ def signup_user(data: SignupRequest,db:Session = Depends(get_db_session)):
             ],
         )
         cognito_sub = cognito_response.get("UserSub")
-        
         if not cognito_sub:
             raise HTTPException(status_code=500, detail="Failed to retrieve user sub from Cognito response")
-        
-        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-        hashed_password = pwd_context.hash(data.password)
 
-        new_user = UserModel(
-            full_name=data.name,
-            email=data.email,
-            cognito_sub=cognito_sub,
-            password_hash=hashed_password,
-            role=data.role, # Store the role!
-            email_verified=False
-        )
-        db.add(new_user)
-        db.flush()
-        
-        # 5. Create Specific Profile (The Magic Part)
-        if data.role == "RECRUITER":
-            # For 40% submission: Create a new company for every recruiter automatically
-            # or link to a default one. Here we create a new one.
-            company_name = data.company_name if data.company_name else f"{data.name}'s Company"
-            
-            new_company = CompanyModel(
-                name=company_name
-            )
-            db.add(new_company)
-            db.flush() # Get company ID
-
-            new_recruiter = RecruiterModel(
-                id=new_user.id, # Link to User
-                company_id=new_company.id, # Link to new Company
-                is_admin=True # First user is always admin
-            )
-            db.add(new_recruiter)
-
-        elif data.role == "CANDIDATE":
-            new_candidate = CandidateModel(
-                id=new_user.id, # Link to User
-                phone=data.phone
-            )
-            db.add(new_candidate)
-
-        # 6. Commit Everything
+        # 3) Update user with Cognito sub and commit
+        new_user.cognito_sub = cognito_sub
         db.commit()
         db.refresh(new_user)
-        
+
         return {
             "message": "User registered successfully. Please verify email.",
             "user_sub": cognito_sub,
-            "role": data.role
+            "role": data.role,
         }
 
     except Exception as e:
-        db.rollback() # Important: Undo DB changes if Cognito fails or Profile creation fails
+        # If Cognito fails, rollback DB so no partial user exists
+        db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
     
     

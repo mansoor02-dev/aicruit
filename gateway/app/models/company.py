@@ -16,3 +16,6 @@ class CompanyModel(Base):
 
     # Relationship: One Company has Many Recruiters
     recruiters = relationship("RecruiterModel", back_populates="company")
+
+    # Relationship: One Company has Many Jobs
+    jobs = relationship("JobModel", back_populates="company")
