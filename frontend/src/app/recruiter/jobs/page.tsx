@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { RecruiterLayout } from '@/components/layout/RecruiterLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -31,15 +31,36 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { mockJobs, Job } from '@/data/mockData';
-import { Plus, Search, Eye, Edit, X } from 'lucide-react';
+import { Plus, Search, Eye, Edit, X, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
+import { api } from '@/lib/api';
+
+interface JobApiResponse {
+  id: string;
+  title: string;
+  description: string;
+  location: string;
+  type: string;
+  salary_min: number | null;
+  salary_max: number | null;
+  required_skills: string[];
+  experience_level: string;
+  company_id: string;
+  recruiter_id: string;
+  status: string;
+  created_at: string;
+  company_name?: string;
+}
 
 export default function Jobs() {
-  const [jobs, setJobs] = useState<Job[]>(mockJobs);
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [newJob, setNewJob] = useState({
     title: '',
     description: '',
@@ -53,6 +74,46 @@ export default function Jobs() {
   });
   const [skillInput, setSkillInput] = useState('');
   const { toast } = useToast();
+
+  const fetchJobs = async () => {
+    try {
+      setLoading(true);
+      const response: JobApiResponse[] = await api.get('/jobs');
+      const mappedJobs: Job[] = response.map(job => ({
+        id: job.id,
+        title: job.title,
+        company: job.company_name || 'Your Company',
+        location: job.location,
+        type: job.type as Job['type'],
+        experienceLevel: job.experience_level as Job['experienceLevel'],
+        salaryMin: job.salary_min || 0,
+        salaryMax: job.salary_max || 0,
+        requiredSkills: job.required_skills,
+        description: job.description,
+        status: (job.status === 'OPEN' ? 'Open' : job.status === 'CLOSED' ? 'Closed' : 'Draft') as Job['status'],
+        applicants: 0, // This would need a separate API call or be included in response
+        createdAt: new Date(job.created_at).toISOString().split('T')[0],
+      }));
+      setJobs(mappedJobs);
+    } catch (error) {
+      console.error('Failed to fetch jobs:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load jobs. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchJobs();
+  }, []);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const filteredJobs = jobs.filter(job => 
     job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -79,7 +140,7 @@ export default function Jobs() {
     }));
   };
 
-  const handleCreateJob = () => {
+  const handleCreateJob = async () => {
     if (!newJob.title || !newJob.description || !newJob.location) {
       toast({
         title: 'Error',
@@ -101,40 +162,52 @@ export default function Jobs() {
       return;
     }
 
-    const job: Job = {
-      id: String(jobs.length + 1),
-      title: newJob.title,
-      description: newJob.description,
-      company: 'TechCorp',
-      type: newJob.type,
-      location: newJob.location,
-      experienceLevel: newJob.experienceLevel,
-      salaryMin,
-      salaryMax,
-      requiredSkills: newJob.requiredSkills,
-      status: newJob.status,
-      applicants: 0,
-      createdAt: new Date().toISOString().split('T')[0],
-    };
+    try {
+      setCreating(true);
+      const jobData = {
+        title: newJob.title,
+        description: newJob.description,
+        location: newJob.location,
+        type: newJob.type,
+        salary_min: salaryMin || null,
+        salary_max: salaryMax || null,
+        required_skills: newJob.requiredSkills,
+        experience_level: newJob.experienceLevel,
+      };
 
-    setJobs(prev => [job, ...prev]);
-    setIsDialogOpen(false);
-    setNewJob({
-      title: '',
-      description: '',
-      type: 'Remote',
-      location: '',
-      experienceLevel: 'Mid-level',
-      salaryMin: '',
-      salaryMax: '',
-      requiredSkills: [],
-      status: 'Draft',
-    });
+      await api.post('/jobs', jobData);
 
-    toast({
-      title: 'Success',
-      description: 'Job created successfully',
-    });
+      // Reset form
+      setNewJob({
+        title: '',
+        description: '',
+        type: 'Remote',
+        location: '',
+        experienceLevel: 'Mid-level',
+        salaryMin: '',
+        salaryMax: '',
+        requiredSkills: [],
+        status: 'Draft',
+      });
+      setIsDialogOpen(false);
+
+      toast({
+        title: 'Success',
+        description: 'Job created successfully',
+      });
+
+      // Refresh jobs list
+      await fetchJobs();
+    } catch (error) {
+      console.error('Failed to create job:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to create job. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setCreating(false);
+    }
   };
 
   const getStatusBadge = (status: Job['status']) => {
@@ -147,6 +220,24 @@ export default function Jobs() {
         return <Badge variant="outline">Draft</Badge>;
     }
   };
+
+  if (!mounted) {
+    return (
+      <RecruiterLayout>
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">Jobs Management</h1>
+              <p className="text-muted-foreground">Create and manage your job postings</p>
+            </div>
+          </div>
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-6 h-6 animate-spin" />
+          </div>
+        </div>
+      </RecruiterLayout>
+    );
+  }
 
   return (
     <RecruiterLayout>
@@ -312,8 +403,15 @@ export default function Jobs() {
                   <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
                     Cancel
                   </Button>
-                  <Button onClick={handleCreateJob}>
-                    Create Job
+                  <Button onClick={handleCreateJob} disabled={creating}>
+                    {creating ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      'Create Job'
+                    )}
                   </Button>
                 </div>
               </div>
@@ -346,31 +444,48 @@ export default function Jobs() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredJobs.map((job) => (
-                  <TableRow key={job.id}>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{job.title}</p>
-                        <p className="text-sm text-muted-foreground">{job.location} · {job.type}</p>
-                      </div>
-                    </TableCell>
-                    <TableCell>{format(parseISO(job.createdAt), 'MMM d, yyyy')}</TableCell>
-                    <TableCell>{job.applicants}</TableCell>
-                    <TableCell>{getStatusBadge(job.status)}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button variant="ghost" size="icon" asChild>
-                          <Link href={`/recruiter/jobs/${job.id}`}>
-                            <Eye className="w-4 h-4" />
-                          </Link>
-                        </Button>
-                        <Button variant="ghost" size="icon">
-                          <Edit className="w-4 h-4" />
-                        </Button>
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-8">
+                      <div className="flex items-center justify-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Loading jobs...
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : filteredJobs.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                      No jobs found. Create your first job posting.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredJobs.map((job) => (
+                    <TableRow key={job.id}>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{job.title}</p>
+                          <p className="text-sm text-muted-foreground">{job.location} · {job.type}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>{format(parseISO(job.createdAt), 'MMM d, yyyy')}</TableCell>
+                      <TableCell>{job.applicants}</TableCell>
+                      <TableCell>{getStatusBadge(job.status)}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button variant="ghost" size="icon" asChild>
+                            <Link href={`/recruiter/jobs/${job.id}`}>
+                              <Eye className="w-4 h-4" />
+                            </Link>
+                          </Button>
+                          <Button variant="ghost" size="icon">
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </CardContent>

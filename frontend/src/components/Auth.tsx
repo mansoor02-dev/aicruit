@@ -74,25 +74,42 @@ const Auth = () => {
       return;
     }
 
+    if (mode === 'signup' && role === 'CANDIDATE' && !phone) {
+      toast({
+        title: 'Error',
+        description: 'Please enter your phone number',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setLoading(true);
     try {
       if (mode === 'login') {
         await login(email, password, role);
-      } else {
-        await signup(email, password, name, role, phone, companyName);
+
+        toast({
+          title: 'Success',
+          description: 'Welcome back!',
+        });
+
+        // Redirect based on role
+        if (role === 'RECRUITER') {
+          router.push('/recruiter/dashboard');
+        } else {
+          router.push('/candidate/jobs');
+        }
+        return;
       }
-      
+
+      await signup(email, password, name, role, phone, companyName);
+
       toast({
-        title: 'Success',
-        description: mode === 'login' ? 'Welcome back!' : 'Account created successfully!',
+        title: 'Verify your email',
+        description: 'We have sent you a 6-digit OTP. Please verify to continue.',
       });
 
-      // Redirect based on role
-      if (role === 'RECRUITER') {
-        router.push('/recruiter/dashboard');
-      } else {
-        router.push('/candidate/jobs');
-      }
+      router.push(`/otp?email=${encodeURIComponent(email)}&role=${role}`);
     } catch (error) {
       toast({
         title: 'Error',
@@ -133,7 +150,6 @@ const Auth = () => {
             <Tabs value={role || 'RECRUITER'} onValueChange={(v) => {
               setRole(v as UserRole);
               if (v === 'CANDIDATE') {
-                setPhone('');
                 setCompanyName('');
               }
             }} className="mb-6">
@@ -222,6 +238,19 @@ const Auth = () => {
                         />
                       </div>
                     </>
+                  )}
+
+                  {role === 'CANDIDATE' && (
+                    <div className="space-y-2">
+                      <Label htmlFor="phone">Phone Number</Label>
+                      <Input
+                        id="phone"
+                        placeholder="+1 (555) 123-4567"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        className="bg-background"
+                      />
+                    </div>
                   )}
                 </>
               )}

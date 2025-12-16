@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { CandidateLayout } from '@/components/layout/CandidateLayout';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,18 +20,86 @@ import {
   DollarSign, 
   Search,
   Filter,
-  Building2
+  Building2,
+  Loader2
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { api } from '@/lib/api';
+
+interface JobApiResponse {
+  id: string;
+  title: string;
+  description: string;
+  location: string;
+  type: string;
+  salary_min: number | null;
+  salary_max: number | null;
+  required_skills: string[];
+  experience_level: string;
+  company_id: string;
+  recruiter_id: string;
+  status: string;
+  created_at: string;
+  company_name?: string;
+}
 
 export default function CandidateJobs() {
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [locationFilter, setLocationFilter] = useState('all');
   const [experienceFilter, setExperienceFilter] = useState('all');
   const [appliedJobs, setAppliedJobs] = useState<string[]>([]);
   const { toast } = useToast();
 
-  const openJobs = mockJobs.filter(j => j.status === 'Open');
+  const fetchJobs = async () => {
+    try {
+      console.log('Fetching jobs...');
+      setLoading(true);
+      const response: JobApiResponse[] = await api.get('/jobs');
+      console.log('Jobs response:', response);
+      const mappedJobs: Job[] = response
+        .filter(job => job.status === 'OPEN') // Only show open jobs for candidates
+        .map(job => ({
+          id: job.id,
+          title: job.title,
+          company: job.company_name || 'Company',
+          location: job.location,
+          type: job.type as Job['type'],
+          experienceLevel: job.experience_level as Job['experienceLevel'],
+          salaryMin: job.salary_min || 0,
+          salaryMax: job.salary_max || 0,
+          requiredSkills: job.required_skills,
+          description: job.description,
+          status: 'Open' as Job['status'],
+          applicants: 0, // This would need a separate API call
+          createdAt: new Date(job.created_at).toISOString().split('T')[0],
+        }));
+      console.log('Mapped jobs:', mappedJobs);
+      setJobs(mappedJobs);
+    } catch (error) {
+      console.error('Failed to fetch jobs:', error);
+      // Don't show toast for now, just log
+      // toast({
+      //   title: 'Error',
+      //   description: 'Failed to load jobs. Please try again.',
+      //   variant: 'destructive',
+      // });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchJobs();
+  }, []);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const openJobs = jobs.filter(j => j.status === 'Open');
 
   const filteredJobs = openJobs.filter(job => {
     const matchesSearch = job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -49,9 +117,32 @@ export default function CandidateJobs() {
     });
   };
 
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-background p-4">
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Browse Jobs</h1>
+            <p className="text-muted-foreground">Find your next opportunity</p>
+          </div>
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-6 h-6 animate-spin" />
+            <p className="ml-2">Loading...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <CandidateLayout>
       <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Browse Jobs</h1>
+          <p className="text-muted-foreground">Find your next opportunity</p>
+        </div>
+
+        {/* Filters */}
         <div>
           <h1 className="text-2xl font-bold text-foreground">Browse Jobs</h1>
           <p className="text-muted-foreground">Find your next opportunity</p>
@@ -96,66 +187,102 @@ export default function CandidateJobs() {
 
         {/* Jobs Grid */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredJobs.map((job) => (
-            <Card key={job.id} className="bg-card border-border hover:shadow-lg transition-all">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className="p-2 bg-primary/10 rounded-lg">
-                    <Building2 className="w-6 h-6 text-primary" />
-                  </div>
-                  <Badge variant="secondary">{job.type}</Badge>
-                </div>
-                <div className="pt-3">
-                  <h3 className="text-lg font-semibold text-foreground">{job.title}</h3>
-                  <p className="text-muted-foreground">{job.company}</p>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <MapPin className="w-4 h-4" />
-                  {job.location}
-                </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Briefcase className="w-4 h-4" />
-                  {job.experienceLevel}
-                </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <DollarSign className="w-4 h-4" />
-                  ${job.salaryMin.toLocaleString()} - ${job.salaryMax.toLocaleString()}
-                </div>
-                <div className="flex flex-wrap gap-2 pt-2">
-                  {job.requiredSkills.slice(0, 3).map((skill) => (
-                    <Badge key={skill} variant="outline" className="text-xs">
-                      {skill}
-                    </Badge>
-                  ))}
-                  {job.requiredSkills.length > 3 && (
-                    <Badge variant="outline" className="text-xs">
-                      +{job.requiredSkills.length - 3}
-                    </Badge>
-                  )}
-                </div>
-              </CardContent>
-              <CardFooter>
-                {appliedJobs.includes(job.id) ? (
-                  <Button disabled className="w-full" variant="secondary">
-                    Applied
-                  </Button>
-                ) : (
-                  <Button className="w-full" onClick={() => handleApply(job.id)}>
-                    Quick Apply
-                  </Button>
-                )}
-              </CardFooter>
-            </Card>
-          ))}
+          {loading ? (
+            // Loading skeleton
+            Array.from({ length: 6 }).map((_, i) => {
+              return (
+                <Card key={i} className="bg-card border-border">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between">
+                      <div className="p-2 bg-primary/10 rounded-lg">
+                        <Building2 className="w-6 h-6 text-primary" />
+                      </div>
+                      <div className="h-6 w-16 bg-muted rounded animate-pulse" />
+                    </div>
+                    <div className="pt-3 space-y-2">
+                      <div className="h-5 bg-muted rounded animate-pulse" />
+                      <div className="h-4 w-3/4 bg-muted rounded animate-pulse" />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="h-4 bg-muted rounded animate-pulse" />
+                    <div className="h-4 bg-muted rounded animate-pulse" />
+                    <div className="h-4 bg-muted rounded animate-pulse" />
+                    <div className="flex gap-2">
+                      <div className="h-6 w-16 bg-muted rounded animate-pulse" />
+                      <div className="h-6 w-20 bg-muted rounded animate-pulse" />
+                    </div>
+                  </CardContent>
+                  <CardFooter>
+                    <div className="h-10 w-full bg-muted rounded animate-pulse" />
+                  </CardFooter>
+                </Card>
+              );
+            })
+          ) : filteredJobs.length === 0 ? (
+            <div className="col-span-full text-center py-12">
+              <p className="text-muted-foreground">No jobs found matching your criteria</p>
+            </div>
+          ) : (
+            filteredJobs.map((job) => {
+              return (
+                <Card key={job.id} className="bg-card border-border hover:shadow-lg transition-all">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between">
+                      <div className="p-2 bg-primary/10 rounded-lg">
+                        <Building2 className="w-6 h-6 text-primary" />
+                      </div>
+                      <Badge variant="secondary">{job.type}</Badge>
+                    </div>
+                    <div className="pt-3">
+                      <h3 className="text-lg font-semibold text-foreground">{job.title}</h3>
+                      <p className="text-muted-foreground">{job.company}</p>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <MapPin className="w-4 h-4" />
+                      {job.location}
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Briefcase className="w-4 h-4" />
+                      {job.experienceLevel}
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <DollarSign className="w-4 h-4" />
+                      ${job.salaryMin.toLocaleString()} - ${job.salaryMax.toLocaleString()}
+                    </div>
+                    <div className="flex flex-wrap gap-2 pt-2">
+                      {job.requiredSkills.slice(0, 3).map((skill) => {
+                        return (
+                          <Badge key={skill} variant="outline" className="text-xs">
+                            {skill}
+                          </Badge>
+                        );
+                      })}
+                      {job.requiredSkills.length > 3 && (
+                        <Badge variant="outline" className="text-xs">
+                          +{job.requiredSkills.length - 3}
+                        </Badge>
+                      )}
+                    </div>
+                  </CardContent>
+                  <CardFooter>
+                    {appliedJobs.includes(job.id) ? (
+                      <Button disabled className="w-full" variant="secondary">
+                        Applied
+                      </Button>
+                    ) : (
+                      <Button className="w-full" onClick={() => handleApply(job.id)}>
+                        Quick Apply
+                      </Button>
+                    )}
+                  </CardFooter>
+                </Card>
+              );
+            })
+          )}
         </div>
-
-        {filteredJobs.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground">No jobs found matching your criteria</p>
-          </div>
-        )}
       </div>
     </CandidateLayout>
   );
