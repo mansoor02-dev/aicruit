@@ -45,4 +45,68 @@ class JobResponse(JobBase):
 
     class Config:
         from_attributes = True
-        
+
+
+# Schema for Candidate's Applications (Job + Application details combined)
+class MyApplicationResponse(BaseModel):
+    application_id: UUID
+    application_status: str
+    # ai_match_score: int
+    applied_at: datetime
+    # Job details
+    job_id: UUID
+    job_title: str
+    job_description: str
+    location: Optional[str]
+    job_type: Optional[str]
+    salary_min: Optional[int]
+    salary_max: Optional[int]
+    required_skills: List[str]
+    experience_level: Optional[str]
+    last_date_to_apply: Optional[datetime]
+    job_status: str
+    job_created_at: datetime
+
+
+# Schema for Applicant info (Recruiter view)
+class ApplicantInfo(BaseModel):
+    application_id: UUID
+    application_status: str
+    ai_match_score: int
+    applied_at: datetime
+    # Candidate details
+    candidate_id: UUID
+    candidate_name: str
+    candidate_email: str
+    candidate_phone: Optional[str]
+    candidate_linkedin: Optional[str]
+    # Resume info
+    resume_id: Optional[UUID]
+    resume_url: str
+
+    class Config:
+        from_attributes = True
+
+
+# Schema for Recruiter's Job Listing (with list of applicants)
+class JobWithApplicantsResponse(JobBase):
+    id: UUID
+    company_id: UUID
+    recruiter_id: UUID
+    status: str
+    created_at: datetime
+    applicants: List[ApplicantInfo] = []
+
+    class Config:
+        from_attributes = True
+
+
+# Schema for Candidate's Job Listing (basic job details)
+class JobForCandidateResponse(JobBase):
+    id: UUID
+    company_id: UUID
+    status: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

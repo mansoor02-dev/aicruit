@@ -4,18 +4,14 @@ from datetime import datetime
 from uuid import UUID
 
 
-# Base schema for shared properties
-class ApplicationBase(BaseModel):
+# Input schema: requires resume_url to create resume row
+class ApplicationCreate(BaseModel):
+    job_id: UUID
     resume_url: str
 
 
-# Schema for CREATING an application (Candidate applies to job)
-class ApplicationCreate(ApplicationBase):
-    job_id: UUID
-
-
-# Schema for READING an application (Backend Response)
-class ApplicationResponse(ApplicationBase):
+# Output schema: returns resume_id (stored), not the URL
+class ApplicationResponse(BaseModel):
     id: UUID
     job_id: UUID
     candidate_id: UUID

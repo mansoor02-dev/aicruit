@@ -10,3 +10,4 @@ class CandidateModel(Base):
     phone = Column(String(50), nullable=True)
     user = relationship("UserModel", back_populates="candidate")
     applications = relationship("ApplicationModel", back_populates="candidate", cascade="all, delete-orphan")
+    resumes = relationship("ResumeModel", back_populates="candidate", cascade="all, delete-orphan")

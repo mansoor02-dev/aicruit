@@ -11,6 +11,7 @@ from ..models.secrets import SecretKeys
 from ..models.auth_models import LoginRequest, ResendOTPRequest, SignupRequest, ConfirmSignupRequest, ForgotPasswordRequest, ResetPasswordRequest, RefreshTokenRequest
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
+from jose import jwt
 
 router = APIRouter()
 
@@ -116,8 +117,22 @@ def login(data: LoginRequest, db: Session = Depends(get_db_session)):
                 "SECRET_HASH": secret_hash,
             }
         )
-
+        # Try to resolve the user from DB. Prefer cognito_sub when available.
         user = db.query(UserModel).filter(UserModel.email == data.email).first()
+        if user is None:
+            # If the DB user is missing, attempt to decode the IdToken to get the Cognito sub
+            try:
+                id_token = cognito_response['AuthenticationResult']['IdToken']
+                
+                payload = jwt.get_unverified_claims(id_token)
+                cognito_sub = payload.get("sub")
+                if cognito_sub:
+                    user = db.query(UserModel).filter(UserModel.cognito_sub == cognito_sub).first()
+            except Exception:
+                pass
+
+        if user is None:
+            raise HTTPException(status_code=404, detail="User profile not found in database")
     
         return {
             "access_token": cognito_response['AuthenticationResult']['AccessToken'],

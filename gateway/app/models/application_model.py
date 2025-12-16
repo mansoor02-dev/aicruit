@@ -16,7 +16,6 @@ class ApplicationModel(Base):
     resume_id = Column(UUID(as_uuid=True), ForeignKey("resumes.id"), nullable=True)
     
     # --- Application Details ---
-    resume_url = Column(String, nullable=False)  # Direct URL from file-service
     status = Column(String(50), default="APPLIED")  # APPLIED, SCREENING, INTERVIEW_SCHEDULED, OFFERED, REJECTED
     ai_match_score = Column(Integer, default=0)
     
@@ -26,6 +25,7 @@ class ApplicationModel(Base):
     # --- Relationships ---
     job = relationship("JobModel", back_populates="applications")
     candidate = relationship("CandidateModel", back_populates="applications")
+    resume = relationship("ResumeModel", back_populates="applications")
     
     # Ensure candidate can apply to same job only once
     __table_args__ = (
