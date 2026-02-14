@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { ApplyJobModal } from '@/components/ApplyJobModal';
 import { mockJobs, Job } from '@/data/mockData';
 import { 
   MapPin, 
@@ -51,6 +52,8 @@ export default function CandidateJobs() {
   const [locationFilter, setLocationFilter] = useState('all');
   const [experienceFilter, setExperienceFilter] = useState('all');
   const [appliedJobs, setAppliedJobs] = useState<string[]>([]);
+  const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
+  const [selectedJobForApply, setSelectedJobForApply] = useState<{ id: string; title: string } | null>(null);
   const { toast } = useToast();
 
   const fetchJobs = async () => {
@@ -109,12 +112,15 @@ export default function CandidateJobs() {
     return matchesSearch && matchesLocation && matchesExperience;
   });
 
-  const handleApply = (jobId: string) => {
-    setAppliedJobs(prev => [...prev, jobId]);
-    toast({
-      title: 'Application submitted',
-      description: 'Your application has been sent successfully!',
-    });
+  const handleApply = (jobId: string, jobTitle: string) => {
+    setSelectedJobForApply({ id: jobId, title: jobTitle });
+    setIsApplyModalOpen(true);
+  };
+
+  const handleApplySuccess = () => {
+    if (selectedJobForApply) {
+      setAppliedJobs(prev => [...prev, selectedJobForApply.id]);
+    }
   };
 
   if (!mounted) {
@@ -137,12 +143,6 @@ export default function CandidateJobs() {
   return (
     <CandidateLayout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Browse Jobs</h1>
-          <p className="text-muted-foreground">Find your next opportunity</p>
-        </div>
-
-        {/* Filters */}
         <div>
           <h1 className="text-2xl font-bold text-foreground">Browse Jobs</h1>
           <p className="text-muted-foreground">Find your next opportunity</p>
@@ -273,7 +273,10 @@ export default function CandidateJobs() {
                         Applied
                       </Button>
                     ) : (
-                      <Button className="w-full" onClick={() => handleApply(job.id)}>
+                      <Button 
+                        className="w-full" 
+                        onClick={() => handleApply(job.id, job.title)}
+                      >
                         Quick Apply
                       </Button>
                     )}
@@ -284,6 +287,16 @@ export default function CandidateJobs() {
           )}
         </div>
       </div>
+
+      {selectedJobForApply && (
+        <ApplyJobModal
+          jobId={selectedJobForApply.id}
+          jobTitle={selectedJobForApply.title}
+          isOpen={isApplyModalOpen}
+          onClose={() => setIsApplyModalOpen(false)}
+          onApplySuccess={handleApplySuccess}
+        />
+      )}
     </CandidateLayout>
   );
 }

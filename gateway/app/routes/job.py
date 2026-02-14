@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
+import httpx
 
 from ..core.db import get_db_session
 from ..models.job_model import JobModel
@@ -176,7 +177,7 @@ def update_job(
 # 5. APPLY TO JOB (Candidates Only)
 # =========================================================
 @router.post("/apply", response_model=ApplicationResponse, status_code=status.HTTP_201_CREATED)
-def apply_to_job(
+async def apply_to_job(
     application_data: ApplicationCreate,
     db: Session = Depends(get_db_session),
     current_user: UserModel = Depends(allow_candidates)
@@ -228,6 +229,22 @@ def apply_to_job(
         db.add(new_application)
         db.commit()
         db.refresh(new_application)
+        
+        # Call parse-resume microservice to parse and extract skills
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    "http://localhost:8006/parse-resume",
+                    json={"resume_id": str(new_resume.id)},
+                    timeout=30.0
+                )
+                if response.status_code == 200:
+                    print(f"✅ Resume {new_resume.id} parsed successfully")
+                else:
+                    print(f"⚠️ Resume parsing service returned status {response.status_code}")
+        except Exception as service_error:
+            print(f"⚠️ Failed to call parse-resume service: {service_error}")
+            # Continue even if service call fails - application is already created
         
         return new_application
     except HTTPException as he:
@@ -282,9 +299,9 @@ def get_my_applications(
 
 
 # =========================================================
-# 3. GET JOB DETAILS
+# 3. GET JOB DETAILS (Role-Based Response)
 # =========================================================
-@router.get("/{job_id}", response_model=JobResponse)
+@router.get("/{job_id}", response_model=List)
 def get_job_detail(
     job_id: str,
     db: Session = Depends(get_db_session),
@@ -293,5 +310,81 @@ def get_job_detail(
     job = db.query(JobModel).filter(JobModel.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+    
+    if current_user.role == "RECRUITER":
+        # For Recruiter: Return job with all applicants
+        if not current_user.recruiter:
+            raise HTTPException(status_code=403, detail="Recruiter profile incomplete")
         
-    return job
+        # Ensure recruiter owns this job (via company)
+        if job.company_id != current_user.recruiter.company_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only view jobs from your company"
+            )
+        
+        # Get all applications for this job
+        applications = db.query(ApplicationModel).filter(
+            ApplicationModel.job_id == job.id
+        ).all()
+        
+        applicants = []
+        for app in applications:
+            candidate = app.candidate
+            user = candidate.user
+            resume = app.resume
+            
+            applicants.append(
+                ApplicantInfo(
+                    application_id=app.id,
+                    application_status=app.status,
+                    ai_match_score=app.ai_match_score,
+                    applied_at=app.created_at,
+                    candidate_id=candidate.id,
+                    candidate_name=user.full_name,
+                    candidate_email=user.email,
+                    candidate_phone=candidate.phone,
+                    candidate_linkedin=candidate.linkedin_url if hasattr(candidate, 'linkedin_url') else None,
+                    resume_id=resume.id if resume else None,
+                    resume_url=resume.file_url if resume else "",
+                )
+            )
+        
+        return JobWithApplicantsResponse(
+            id=job.id,
+            company_id=job.company_id,
+            recruiter_id=job.recruiter_id,
+            status=job.status,
+            created_at=job.created_at,
+            title=job.title,
+            description=job.description,
+            location=job.location,
+            type=job.type,
+            salary_min=job.salary_min,
+            salary_max=job.salary_max,
+            required_skills=job.required_skills or [],
+            experience_level=job.experience_level,
+            last_date_to_apply=job.last_date_to_apply,
+            applicants=applicants,
+        )
+    
+    else:
+        # For Candidate: Return basic job details
+        if job.status != "OPEN":
+            raise HTTPException(status_code=404, detail="Job not found")
+        
+        return JobForCandidateResponse(
+            id=job.id,
+            company_id=job.company_id,
+            status=job.status,
+            created_at=job.created_at,
+            title=job.title,
+            description=job.description,
+            location=job.location,
+            type=job.type,
+            salary_min=job.salary_min,
+            salary_max=job.salary_max,
+            required_skills=job.required_skills or [],
+            experience_level=job.experience_level,
+            last_date_to_apply=job.last_date_to_apply,
+        )

@@ -127,7 +127,7 @@ CREATE TABLE IF NOT EXISTS interviews (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
--- ============================
+-- ========= ===================
 -- 9. INTERVIEW QUESTIONS
 -- ============================
 CREATE TABLE IF NOT EXISTS interview_questions (

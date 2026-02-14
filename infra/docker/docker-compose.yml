@@ -117,24 +117,22 @@ services:
       - resume-parser
       - file-service
 
-  # audio-transcribe:
-  #   build:
-  #     context: ../../services/transcribe-audio
-  #   container_name: aicruit_audio_transcribe
-  #   ports:
-  #     - "8007:8007"
-  #   env_file:
-  #     - ../../services/transcribe-audio/app/.env
-  #   environment:
-  #     UPLOAD_DIR: /tmp/uploads
-  #     PY_WHISPER_MODEL: small
-  #     FRONTEND_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
-  #   volumes:
-  #     - ../../services/transcribe-audio/models:/app/models
-  #     - ../../services/transcribe-audio/Release:/app/Release
-  #   depends_on:
-  #     - file-service
-  #   restart: always
+  audio-transcribe:
+    build:
+      context: ../../services/transcribe-audio
+    container_name: aicruit_audio_transcribe
+    ports:
+      - "8007:8007"
+    env_file:
+      - ../../services/transcribe-audio/app/.env
+    environment:
+      UPLOAD_DIR: /tmp/uploads
+      PY_WHISPER_MODEL: small
+      FRONTEND_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      GROQ_API_KEY: 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
+    depends_on:
+      - file-service
+    restart: always
 
 volumes:
   pgdata:

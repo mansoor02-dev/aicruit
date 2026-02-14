@@ -37,6 +37,20 @@ import { format, parseISO } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
 
+interface ApplicantInfo {
+  application_id: string;
+  application_status: string;
+  ai_match_score: number;
+  applied_at: string;
+  candidate_id: string;
+  candidate_name: string;
+  candidate_email: string;
+  candidate_phone: string;
+  candidate_linkedin: string | null;
+  resume_id: string;
+  resume_url: string;
+}
+
 interface JobApiResponse {
   id: string;
   title: string;
@@ -51,6 +65,8 @@ interface JobApiResponse {
   recruiter_id: string;
   status: string;
   created_at: string;
+  last_date_to_apply?: string | null;
+  applicants?: ApplicantInfo[];
   company_name?: string;
 }
 
@@ -91,7 +107,7 @@ export default function Jobs() {
         requiredSkills: job.required_skills,
         description: job.description,
         status: (job.status === 'OPEN' ? 'Open' : job.status === 'CLOSED' ? 'Closed' : 'Draft') as Job['status'],
-        applicants: 0, // This would need a separate API call or be included in response
+        applicants: job.applicants?.length || 0,
         createdAt: new Date(job.created_at).toISOString().split('T')[0],
       }));
       setJobs(mappedJobs);

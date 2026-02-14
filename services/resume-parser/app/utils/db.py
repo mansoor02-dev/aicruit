@@ -1,5 +1,5 @@
 import os
-from sqlalchemy import create_engine, Column, String, Text, DateTime
+from sqlalchemy import create_engine, Column, String, Text, DateTime, JSON
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.sql import func
 
@@ -18,7 +18,10 @@ class Resume(Base):
     id = Column(String, primary_key=True)
     original_file_url = Column(Text, nullable=False)
     parsed_json = Column(Text, nullable=False)
+    parsed_skills = Column(JSON, nullable=True)
     parse_status = Column(String(20), default='success')
+    experience_level = Column(String(50), nullable=True)
+    matching_score = Column(String(3), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
 
