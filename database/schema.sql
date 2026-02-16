@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     full_name VARCHAR(150) NOT NULL,
     email VARCHAR(120) UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
+    -- password_hash TEXT NOT NULL,
     role VARCHAR(20) NOT NULL CHECK (role IN ('CANDIDATE','RECRUITER','ADMIN')),
     cognito_sub VARCHAR(100) UNIQUE,
     email_verified BOOLEAN DEFAULT FALSE,

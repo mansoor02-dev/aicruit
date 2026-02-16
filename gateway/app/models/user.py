@@ -9,7 +9,7 @@ class UserModel(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email = Column(String, unique=True, index=True, nullable=False)
     full_name = Column(String, nullable=False)
-    password_hash = Column(String, nullable=False)
+    # password_hash = Column(String, nullable=False)
     cognito_sub = Column(String, unique=True, nullable=True)
     email_verified = Column(String, default='false')
     role = Column(String,nullable=False, default='CANDIDATE')

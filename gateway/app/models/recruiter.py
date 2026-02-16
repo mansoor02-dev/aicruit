@@ -17,3 +17,6 @@ class RecruiterModel(Base):
     # Relationships
     user = relationship("UserModel", back_populates="recruiter")
     company = relationship("CompanyModel", back_populates="recruiters")
+
+    # A Recruiter can post many Jobs
+    jobs = relationship("JobModel", back_populates="recruiter")
