@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Union
 import httpx
+from uuid import UUID
 
 from ..core.db import get_db_session
 from ..models.job_model import JobModel
@@ -275,6 +276,15 @@ def get_my_applications(
     result = []
     for app in applications:
         job = app.job
+        
+        # Check for scheduled interview
+        scheduled_at = None
+        if hasattr(app, 'interviews') and app.interviews:
+            # Sort by created_at desc to get latest
+            sorted_interviews = sorted(app.interviews, key=lambda x: x.created_at, reverse=True)
+            if sorted_interviews:
+                 scheduled_at = sorted_interviews[0].scheduled_at
+
         result.append(
             MyApplicationResponse(
                 application_id=app.id,
@@ -292,6 +302,7 @@ def get_my_applications(
                 last_date_to_apply=job.last_date_to_apply,
                 job_status=job.status,
                 job_created_at=job.created_at,
+                scheduled_at=scheduled_at
             )
         )
     
@@ -301,12 +312,18 @@ def get_my_applications(
 # =========================================================
 # 3. GET JOB DETAILS (Role-Based Response)
 # =========================================================
-@router.get("/{job_id}", response_model=List)
+@router.get("/{job_id}", response_model=Union[JobWithApplicantsResponse, JobForCandidateResponse])
 def get_job_detail(
     job_id: str,
     db: Session = Depends(get_db_session),
     current_user: UserModel = Depends(allow_anyone)
 ):
+    # Validate job_id
+    try:
+        UUID(job_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Job not found")
+
     job = db.query(JobModel).filter(JobModel.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")

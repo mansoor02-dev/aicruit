@@ -14,7 +14,7 @@ export default function HomePage() {
       if (user?.role === 'RECRUITER') {
         router.push('/recruiter/dashboard');
       } else if (user?.role === 'CANDIDATE') {
-        router.push('/candidate/jobs');
+        router.push('/candidate/job');
       }
     }
   }, [isAuthenticated, user, router]);

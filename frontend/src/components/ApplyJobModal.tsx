@@ -136,7 +136,7 @@ export function ApplyJobModal({
 
     try {
       setIsApplying(true);
-      const applyResponse = await api.post('/jobs/apply', {
+      const applyResponse = await api.post('/job/apply', {
         job_id: jobId,
         resume_url: uploadedFile.url,
       });

@@ -5,11 +5,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/contexts/AuthContext';
-import { 
-  LayoutDashboard, 
-  Briefcase, 
-  Users, 
-  Settings, 
+import {
+  LayoutDashboard,
+  Briefcase,
+  Users,
+  Settings,
   LogOut,
   Bell,
   Search,
@@ -32,7 +32,7 @@ interface RecruiterLayoutProps {
 
 const navItems = [
   { title: 'Overview', url: '/recruiter/dashboard', icon: LayoutDashboard },
-  { title: 'Jobs', url: '/recruiter/jobs', icon: Briefcase },
+  { title: 'Jobs', url: '/recruiter/job', icon: Briefcase },
   { title: 'Candidates', url: '/recruiter/candidates', icon: Users },
   { title: 'Settings', url: '/recruiter/settings', icon: Settings },
 ];

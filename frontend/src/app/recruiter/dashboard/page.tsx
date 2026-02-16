@@ -85,16 +85,16 @@ export default function Dashboard() {
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={analyticsData.monthlyData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis 
-                    dataKey="month" 
+                  <XAxis
+                    dataKey="month"
                     stroke="hsl(var(--muted-foreground))"
                     fontSize={12}
                   />
-                  <YAxis 
+                  <YAxis
                     stroke="hsl(var(--muted-foreground))"
                     fontSize={12}
                   />
-                  <Tooltip 
+                  <Tooltip
                     contentStyle={{
                       backgroundColor: 'hsl(var(--popover))',
                       border: '1px solid hsl(var(--border))',
@@ -102,10 +102,10 @@ export default function Dashboard() {
                       color: 'hsl(var(--popover-foreground))'
                     }}
                   />
-                  <Line 
-                    type="monotone" 
-                    dataKey="applicants" 
-                    stroke="hsl(var(--primary))" 
+                  <Line
+                    type="monotone"
+                    dataKey="applicants"
+                    stroke="hsl(var(--primary))"
                     strokeWidth={2}
                     dot={{ fill: 'hsl(var(--primary))', strokeWidth: 2 }}
                     activeDot={{ r: 6, fill: 'hsl(var(--primary))' }}
@@ -136,8 +136,8 @@ export default function Dashboard() {
                 </TabsList>
                 <TabsContent value="meetings" className="space-y-3">
                   {scheduledInterviews.map((interview) => (
-                    <div 
-                      key={interview.id} 
+                    <div
+                      key={interview.id}
                       className="flex items-center justify-between p-3 rounded-lg bg-background border border-border"
                     >
                       <div>
@@ -173,13 +173,13 @@ export default function Dashboard() {
                 <CardTitle className="text-base font-semibold">Recently Opened Positions</CardTitle>
               </div>
               <Button variant="outline" size="sm" asChild>
-                <Link href="/recruiter/jobs">All Positions</Link>
+                <Link href="/recruiter/job">All Positions</Link>
               </Button>
             </CardHeader>
             <CardContent className="space-y-3">
               {recentJobs.map((job) => (
-                <div 
-                  key={job.id} 
+                <div
+                  key={job.id}
                   className="flex items-center justify-between p-3 rounded-lg bg-background border border-border"
                 >
                   <div>
@@ -192,7 +192,7 @@ export default function Dashboard() {
                     </Badge>
                     <Badge variant="secondary">Active</Badge>
                     <Button variant="ghost" size="sm" asChild>
-                      <Link href={`/recruiter/jobs/${job.id}`}>
+                      <Link href={`/recruiter/job/${job.id}`}>
                         Details <ArrowRight className="w-3 h-3 ml-1" />
                       </Link>
                     </Button>

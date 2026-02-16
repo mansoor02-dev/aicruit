@@ -15,10 +15,10 @@ import {
 } from '@/components/ui/select';
 import { ApplyJobModal } from '@/components/ApplyJobModal';
 import { mockJobs, Job } from '@/data/mockData';
-import { 
-  MapPin, 
-  Briefcase, 
-  DollarSign, 
+import {
+  MapPin,
+  Briefcase,
+  DollarSign,
   Search,
   Filter,
   Building2,
@@ -60,7 +60,7 @@ export default function CandidateJobs() {
     try {
       console.log('Fetching jobs...');
       setLoading(true);
-      const response: JobApiResponse[] = await api.get('/jobs');
+      const response: JobApiResponse[] = await api.get('/job');
       console.log('Jobs response:', response);
       const mappedJobs: Job[] = response
         .filter(job => job.status === 'OPEN') // Only show open jobs for candidates
@@ -106,7 +106,7 @@ export default function CandidateJobs() {
 
   const filteredJobs = openJobs.filter(job => {
     const matchesSearch = job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         job.requiredSkills.some(s => s.toLowerCase().includes(searchTerm.toLowerCase()));
+      job.requiredSkills.some(s => s.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesLocation = locationFilter === 'all' || job.type === locationFilter;
     const matchesExperience = experienceFilter === 'all' || job.experienceLevel === experienceFilter;
     return matchesSearch && matchesLocation && matchesExperience;
@@ -273,8 +273,8 @@ export default function CandidateJobs() {
                         Applied
                       </Button>
                     ) : (
-                      <Button 
-                        className="w-full" 
+                      <Button
+                        className="w-full"
                         onClick={() => handleApply(job.id, job.title)}
                       >
                         Quick Apply

@@ -94,7 +94,7 @@ export default function Jobs() {
   const fetchJobs = async () => {
     try {
       setLoading(true);
-      const response: JobApiResponse[] = await api.get('/jobs');
+      const response: JobApiResponse[] = await api.get('/job');
       const mappedJobs: Job[] = response.map(job => ({
         id: job.id,
         title: job.title,
@@ -131,7 +131,7 @@ export default function Jobs() {
     setMounted(true);
   }, []);
 
-  const filteredJobs = jobs.filter(job => 
+  const filteredJobs = jobs.filter(job =>
     job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
     job.location.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -168,7 +168,7 @@ export default function Jobs() {
 
     const salaryMin = parseInt(newJob.salaryMin);
     const salaryMax = parseInt(newJob.salaryMax);
-    
+
     if (salaryMax <= salaryMin) {
       toast({
         title: 'Error',
@@ -191,7 +191,7 @@ export default function Jobs() {
         experience_level: newJob.experienceLevel,
       };
 
-      await api.post('/jobs', jobData);
+      await api.post('/job', jobData);
 
       // Reset form
       setNewJob({
@@ -302,8 +302,8 @@ export default function Jobs() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="type">Job Type</Label>
-                    <Select 
-                      value={newJob.type} 
+                    <Select
+                      value={newJob.type}
                       onValueChange={(v) => setNewJob(prev => ({ ...prev, type: v as Job['type'] }))}
                     >
                       <SelectTrigger className="bg-background">
@@ -332,8 +332,8 @@ export default function Jobs() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="experience">Experience Level</Label>
-                    <Select 
-                      value={newJob.experienceLevel} 
+                    <Select
+                      value={newJob.experienceLevel}
                       onValueChange={(v) => setNewJob(prev => ({ ...prev, experienceLevel: v as Job['experienceLevel'] }))}
                     >
                       <SelectTrigger className="bg-background">
@@ -350,8 +350,8 @@ export default function Jobs() {
 
                   <div className="space-y-2">
                     <Label htmlFor="status">Status</Label>
-                    <Select 
-                      value={newJob.status} 
+                    <Select
+                      value={newJob.status}
                       onValueChange={(v) => setNewJob(prev => ({ ...prev, status: v as Job['status'] }))}
                     >
                       <SelectTrigger className="bg-background">
@@ -490,7 +490,7 @@ export default function Jobs() {
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
                           <Button variant="ghost" size="icon" asChild>
-                            <Link href={`/recruiter/jobs/${job.id}`}>
+                            <Link href={`/recruiter/job/${job.id}`}>
                               <Eye className="w-4 h-4" />
                             </Link>
                           </Button>

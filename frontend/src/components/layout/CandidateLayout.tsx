@@ -5,10 +5,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/contexts/AuthContext';
-import { 
-  Briefcase, 
-  FileText, 
-  User, 
+import {
+  Briefcase,
+  FileText,
+  User,
   LogOut,
   Bell,
   Search
@@ -30,7 +30,7 @@ interface CandidateLayoutProps {
 }
 
 const navItems = [
-  { title: 'Browse Jobs', url: '/candidate/jobs', icon: Briefcase },
+  { title: 'Browse Jobs', url: '/candidate/job', icon: Briefcase },
   { title: 'My Applications', url: '/candidate/applications', icon: FileText },
   { title: 'Profile', url: '/candidate/profile', icon: User },
 ];
@@ -50,7 +50,7 @@ export const CandidateLayout = ({ children }: CandidateLayoutProps) => {
       <header className="h-16 bg-card border-b border-border sticky top-0 z-50">
         <div className="container h-full flex items-center justify-between">
           <div className="flex items-center gap-8">
-            <Link href="/candidate/jobs" className="flex items-center gap-2">
+            <Link href="/candidate/job" className="flex items-center gap-2">
               <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
                 <span className="text-primary-foreground font-bold text-sm">AI</span>
               </div>

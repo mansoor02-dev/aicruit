@@ -66,6 +66,7 @@ class MyApplicationResponse(BaseModel):
     last_date_to_apply: Optional[datetime]
     job_status: str
     job_created_at: datetime
+    scheduled_at: Optional[datetime] = None
 
 
 # Schema for Applicant info (Recruiter view)

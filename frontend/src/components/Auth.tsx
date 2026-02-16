@@ -37,7 +37,7 @@ const Auth = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!email || !password) {
       toast({
         title: 'Error',
@@ -97,7 +97,7 @@ const Auth = () => {
         if (role === 'RECRUITER') {
           router.push('/recruiter/dashboard');
         } else {
-          router.push('/candidate/jobs');
+          router.push('/candidate/job');
         }
         return;
       }
@@ -140,8 +140,8 @@ const Auth = () => {
               {mode === 'login' ? 'Welcome back' : 'Create an account'}
             </CardTitle>
             <CardDescription className="text-center">
-              {mode === 'login' 
-                ? 'Sign in to your account to continue' 
+              {mode === 'login'
+                ? 'Sign in to your account to continue'
                 : 'Enter your details to get started'}
             </CardDescription>
           </CardHeader>
@@ -154,14 +154,14 @@ const Auth = () => {
               }
             }} className="mb-6">
               <TabsList className="grid w-full grid-cols-2 bg-muted">
-                <TabsTrigger 
-                  value="RECRUITER" 
+                <TabsTrigger
+                  value="RECRUITER"
                   className="flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
                 >
                   <Briefcase className="w-4 h-4" />
                   Recruiter
                 </TabsTrigger>
-                <TabsTrigger 
+                <TabsTrigger
                   value="CANDIDATE"
                   className="flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
                 >
@@ -283,9 +283,9 @@ const Auth = () => {
                 </>
               )}
 
-              <Button 
-                type="submit" 
-                className="w-full" 
+              <Button
+                type="submit"
+                className="w-full"
                 disabled={loading}
               >
                 {loading ? (
@@ -305,8 +305,8 @@ const Auth = () => {
                 onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}
                 className="text-sm text-primary hover:underline"
               >
-                {mode === 'login' 
-                  ? "Don't have an account? Sign up" 
+                {mode === 'login'
+                  ? "Don't have an account? Sign up"
                   : 'Already have an account? Sign in'}
               </button>
             </div>

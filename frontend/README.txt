@@ -82,13 +82,13 @@ PUBLIC ROUTES:
 
 RECRUITER ROUTES (Protected):
 - /recruiter/dashboard       → Analytics overview with charts and stats
-- /recruiter/jobs            → Job postings management
-- /recruiter/jobs/[id]       → Individual job details with applicant kanban
+- /recruiter/job            → Job postings management
+- /recruiter/job/[id]       → Individual job details with applicant kanban
 - /recruiter/candidates      → All candidates across all jobs
 - /recruiter/settings        → Company profile, team, billing, notifications
 
 CANDIDATE ROUTES (Protected):
-- /candidate/jobs            → Browse and search available jobs
+- /candidate/job            → Browse and search available jobs
 - /candidate/applications    → Track application status
 - /candidate/profile         → Edit profile, upload resume, manage skills
 
@@ -99,7 +99,7 @@ AUTHENTICATION FLOW
 3. User selects role (Recruiter or Candidate)
 4. After login/signup → Redirects based on role:
    - RECRUITER → /recruiter/dashboard
-   - CANDIDATE → /candidate/jobs
+   - CANDIDATE → /candidate/job
 5. Auth state stored in localStorage (client-side only)
 6. Protected routes check authentication via AuthContext
 

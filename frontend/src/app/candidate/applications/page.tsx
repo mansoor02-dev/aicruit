@@ -17,7 +17,7 @@ import Link from 'next/link';
 import { api } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 
-interface Application {
+export interface Application {
   application_id: string;
   application_status: string;
   applied_at: string;
@@ -33,6 +33,7 @@ interface Application {
   last_date_to_apply: string | null;
   job_status: string;
   job_created_at: string;
+  scheduled_at?: string;
 }
 
 export default function Applications() {
@@ -51,7 +52,7 @@ export default function Applications() {
     const fetchApplications = async () => {
       try {
         setLoading(true);
-        const response: Application[] = await api.get('/jobs/my-applications');
+        const response: Application[] = await api.get('/job/my-applications');
         setApplications(response);
       } catch (error) {
         console.error('Failed to fetch applications:', error);
@@ -119,7 +120,7 @@ export default function Applications() {
           <div className="text-center py-12">
             <p className="text-muted-foreground mb-4">You haven't applied to any jobs yet</p>
             <Button asChild>
-              <Link href="/candidate/jobs">Browse Jobs</Link>
+              <Link href="/candidate/job">Browse Jobs</Link>
             </Button>
           </div>
         ) : (
