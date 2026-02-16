@@ -1,0 +1,2 @@
+*.gguf
+services/question_generator/models/llm/

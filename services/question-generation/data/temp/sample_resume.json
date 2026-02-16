@@ -1,0 +1,65 @@
+{
+  "resume": {
+    "candidate_name": "Alex Chen",
+    "contact": {
+      "email": "alex.chen@email.com",
+      "phone": "(415) 555-0198",
+      "linkedin": "linkedin.com/in/alexchen-swe",
+      "github": "github.com/alexchen92",
+      "location": "San Francisco, CA"
+    },
+    "summary": "Senior backend engineer with 7 years of experience building scalable distributed systems at high-growth startups. Specialized in Go, Kotlin, and event-driven architectures. Passionate about system design and mentoring.",
+    "experience": [
+      {
+        "title": "Senior Software Engineer",
+        "company": "Stripe",
+        "dates": "2022 - Present",
+        "location": "San Francisco, CA",
+        "achievements": [
+          "Led migration of core payments orchestration from Ruby to Go, improving throughput 4x and reducing P99 latency from 800ms to 120ms",
+          "Designed and shipped fault-tolerant retry framework used by 50+ internal services",
+          "Reduced incident MTTR by 60% through improved observability and runbooks",
+          "Mentored 4 junior engineers; 3 promoted to mid-level"
+        ]
+      },
+      {
+        "title": "Software Engineer",
+        "company": "Robinhood",
+        "dates": "2019 - 2022",
+        "location": "Menlo Park, CA",
+        "achievements": [
+          "Built real-time trade execution engine handling 10M+ orders/day using Kotlin + Kafka",
+          "Implemented distributed locking system that reduced race conditions by 99.9%",
+          "Owned on-call for trading infrastructure (SLO 99.99%)",
+          "Reduced deployment time from 45min to under 5min via custom CI/CD tooling"
+        ]
+      },
+      {
+        "title": "Backend Engineer",
+        "company": "Coinbase",
+        "dates": "2017 - 2019",
+        "location": "San Francisco, CA",
+        "achievements": [
+          "Developed internal transfer service processing $2B+ monthly volume",
+          "Implemented database sharding strategy that scaled PostgreSQL writes 8x"
+        ]
+      }
+    ],
+    "education": {
+      "degree": "B.S. Computer Science",
+      "school": "University of California, Berkeley",
+      "graduation": "2017",
+      "gpa": "3.8/4.0"
+    },
+    "skills": [
+      "Languages: Go (expert), Kotlin/Java (expert), Python, TypeScript",
+      "Infrastructure: Kubernetes, Docker, AWS, GCP, Terraform",
+      "Data: PostgreSQL, DynamoDB, Redis, Kafka, Elasticsearch",
+      "Practices: System Design, Observability, On-call, Mentoring"
+    ],
+    "open_source": [
+      "Creator of go-retry (12k GitHub stars)",
+      "Regular contributor to Kubernetes and Prometheus projects"
+    ]
+  }
+}

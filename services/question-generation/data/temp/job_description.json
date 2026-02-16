@@ -1,0 +1,40 @@
+{
+    "job_description": {
+    "title": "Senior Software Engineer - Backend",
+    "company": "Nexlify Technologies",
+    "location": "San Francisco, CA (Hybrid)",
+    "salary_range": "$160,000 - $220,000 USD",
+    "type": "Full-time",
+    "description": "We are looking for an experienced Senior Backend Engineer to join our core platform team. You will design, build, and scale high-performance distributed systems that power millions of daily transactions.",
+    "responsibilities": [
+      "Design and implement scalable microservices using Go and Kotlin",
+      "Own end-to-end features from technical design to production deployment",
+      "Improve system reliability, performance, and observability",
+      "Lead technical decisions and mentor junior engineers",
+      "Collaborate with product, data, and infrastructure teams",
+      "Participate in on-call rotation (generous compensation provided)"
+    ],
+    "requirements": {
+      "must_have": [
+        "5+ years of backend development experience",
+        "Strong proficiency in Go, Kotlin, or Java",
+        "Experience with Kubernetes and cloud platforms (AWS/GCP)",
+        "Deep knowledge of distributed systems and databases (PostgreSQL, DynamoDB, Redis)",
+        "Track record of building high-throughput, low-latency services"
+      ],
+      "nice_to_have": [
+        "Experience with event-driven architecture (Kafka, Pulsar)",
+        "Contributions to open-source projects",
+        "Previous fintech or payments experience"
+      ]
+    },
+    "benefits": [
+      "Equity: 0.1% - 0.4%",
+      "Unlimited PTO + company-wide shutdown weeks",
+      "Top-tier health, dental, and vision insurance",
+      "401(k) matching up to 6%",
+      "Commuter benefits & daily meals",
+      "Annual learning & development stipend $5,000"
+    ]
+  }
+}
