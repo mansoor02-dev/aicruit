@@ -1,26 +1,17 @@
-#!/usr/bin/env python3
-"""
-main.py - Realistic Interview System
-
-Orchestrates all components for natural interview flow with
-dynamic follow-ups based on answer quality.
-"""
-
 import json
 import pickle
 from pathlib import Path
 from datetime import datetime
-
 import pandas as pd
 import numpy as np
 import faiss
 from sentence_transformers import SentenceTransformer
-from llama_cpp import Llama
 
-# Import our modules
 import sys
-sys.path.append(str(Path(__file__).parent))
+sys.path.append(str(Path(__file__).parent.parent))
 
+
+from pipelines.llm_loader import LLMLoader
 from pipelines.conversation_manager import ConversationManager
 from pipelines.flow_controller import FlowController
 from pipelines.question_generator import QuestionGenerator
@@ -31,16 +22,20 @@ from pipelines.answer_evaluator import AnswerEvaluator
 class Config:
     """Centralized configuration"""
     
+    BASE_DIR = Path(__file__).resolve().parents[1]
+    # points to: services/question-generation/
+
     # Paths
-    CSV_PATH = Path("data/software_questions.csv")
-    CACHE_DIR = Path("cache")
+    CSV_PATH = BASE_DIR / "data" / "software_questions.csv"
+    CACHE_DIR = BASE_DIR / "cache"
     INDEX_PATH = CACHE_DIR / "questions.index"
     PASSAGES_PKL = CACHE_DIR / "passages.pkl"
-    LOGS_DIR = Path("logs")
-    
+    LOGS_DIR = BASE_DIR / "logs"
+
+    # Models
+    LLM_PATH = BASE_DIR / "models" / "llm" / "Phi-3-mini-4k-instruct-q4.gguf"
     # Models
     EMBED_MODEL = "all-MiniLM-L6-v2"
-    LLM_PATH = Path("models/llm/Phi-3-mini-4k-instruct-q4.gguf")
     
     # LLM Settings
     N_CTX = 2048
@@ -48,8 +43,8 @@ class Config:
     N_BATCH = 512
     
     # Interview Settings
-    TOTAL_QUESTIONS = 5  # Main questions (not counting follow-ups)
-    MAX_FOLLOWUPS_PER_TOPIC = 2
+    TOTAL_QUESTIONS = 3  # Main questions (not counting follow-ups)
+    MAX_FOLLOWUPS_PER_TOPIC = 1
     DIFFICULTY = "medium"  # Can be made dynamic later
     
     @classmethod
@@ -69,7 +64,7 @@ def load_questions_from_csv(csv_path: Path) -> list:
     if not csv_path.exists():
         raise FileNotFoundError(f"CSV not found: {csv_path}")
     
-    print(f"📚 Loading questions from {csv_path.name}...")
+    print(f"Loading questions from {csv_path.name}...")
     
     try:
         df = pd.read_csv(csv_path, encoding="latin1")
@@ -91,12 +86,6 @@ def load_questions_from_csv(csv_path: Path) -> list:
 
 
 def build_or_load_index(questions: list, embedder: SentenceTransformer) -> tuple:
-    """
-    Build or load FAISS index for question retrieval
-    
-    Returns: (faiss_index, passages_dict)
-    """
-    
     # Check cache
     if Config.INDEX_PATH.exists() and Config.PASSAGES_PKL.exists():
         try:
@@ -108,9 +97,9 @@ def build_or_load_index(questions: list, embedder: SentenceTransformer) -> tuple
                 print(f"✓ Loaded cached index ({index.ntotal} vectors)")
                 return index, passages
         except Exception as e:
-            print(f"⚠️ Cache load failed: {e}, rebuilding...")
+            print(f"Cache load failed: {e}, rebuilding...")
     
-    print(f"🔨 Building FAISS index...")
+    print(f"Building FAISS index...")
     
     # Prepare passages
     passages = []
@@ -151,61 +140,40 @@ def build_or_load_index(questions: list, embedder: SentenceTransformer) -> tuple
 
 
 # ========== MAIN INTERVIEW LOOP ==========
-def run_interview():
-    """
-    Main interview orchestration
-    
-    Flow:
-    1. Ask question (new topic or follow-up)
-    2. Get user answer
-    3. Evaluate answer
-    4. Decide next action (follow-up vs new topic)
-    5. Repeat until complete
-    """
-    
+def run_interview():  
     Config.ensure_dirs()
     
     print("=" * 70)
-    print(" " * 20 + "🎤 REALISTIC INTERVIEW SYSTEM")
+    print(" " * 20 + "REALISTIC INTERVIEW SYSTEM")
     print("=" * 70)
     print()
     
     # ========== INITIALIZATION ==========
-    print("🔧 Initializing components...\n")
+    print("Initializing components...\n")
     
     # Load data
     questions = load_questions_from_csv(Config.CSV_PATH)
     
     # Load embedding model
-    print(f"📦 Loading embedding model: {Config.EMBED_MODEL}")
+    print(f"Loading embedding model: {Config.EMBED_MODEL}")
     embedder = SentenceTransformer(Config.EMBED_MODEL, device='cpu')
     embedder.max_seq_length = 128
     
     # Build/load index
     index, passages = build_or_load_index(questions, embedder)
-    
     # Load LLM
     print(f"\n🤖 Loading LLM: {Config.LLM_PATH.name}")
     if not Config.LLM_PATH.exists():
-        print(f"❌ Model not found: {Config.LLM_PATH}")
+        print(f"Model not found: {Config.LLM_PATH}")
         return
-    
-    llm = Llama(
-        model_path=str(Config.LLM_PATH),
-        n_ctx=Config.N_CTX,
-        n_threads=Config.N_THREADS,
-        n_batch=Config.N_BATCH,
-        use_mlock=True,
-        verbose=False
-    )
     print(f"✓ LLM loaded")
     
     # Initialize components
     print("\n🎯 Initializing interview components...")
     conversation = ConversationManager(total_questions=Config.TOTAL_QUESTIONS)
     flow_controller = FlowController(max_followups_per_topic=Config.MAX_FOLLOWUPS_PER_TOPIC)
-    question_gen = QuestionGenerator(llm=llm, dataset_questions=questions)
-    evaluator = AnswerEvaluator(embedder=embedder, llm=llm)
+    question_gen = QuestionGenerator(model_type="openrouter", dataset_questions=questions)
+    evaluator = AnswerEvaluator(embedder=embedder, model_type="openrouter")
     
     print("✓ All components ready\n")
     
@@ -254,8 +222,7 @@ def run_interview():
             question_text, metadata = question_gen.generate_followup_question(
                 previous_question=last_turn.question,
                 previous_answer=last_turn.answer,
-                followup_angle=decision.suggested_angle,
-                evaluation=last_turn.evaluation
+                evaluation_result=last_turn.evaluation
             )
             topic = last_turn.topic
         else:

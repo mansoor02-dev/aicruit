@@ -1,65 +1,106 @@
 {
-  "resume": {
-    "candidate_name": "Alex Chen",
-    "contact": {
-      "email": "alex.chen@email.com",
-      "phone": "(415) 555-0198",
-      "linkedin": "linkedin.com/in/alexchen-swe",
-      "github": "github.com/alexchen92",
-      "location": "San Francisco, CA"
+  "name": "MANSOOR ABID",
+  "title": "",
+  "summary": "",
+  "contact_info": {
+    "email": "mansoorabid0202@gmail.com",
+    "phone": "+92 302 0000613",
+      "linkedin": "https://www.linkedin.com/in/mansoor-abid-"
     },
-    "summary": "Senior backend engineer with 7 years of experience building scalable distributed systems at high-growth startups. Specialized in Go, Kotlin, and event-driven architectures. Passionate about system design and mentoring.",
-    "experience": [
+    "education": [
       {
-        "title": "Senior Software Engineer",
-        "company": "Stripe",
-        "dates": "2022 - Present",
-        "location": "San Francisco, CA",
-        "achievements": [
-          "Led migration of core payments orchestration from Ruby to Go, improving throughput 4x and reducing P99 latency from 800ms to 120ms",
-          "Designed and shipped fault-tolerant retry framework used by 50+ internal services",
-          "Reduced incident MTTR by 60% through improved observability and runbooks",
-          "Mentored 4 junior engineers; 3 promoted to mid-level"
-        ]
+        "degree": "Bachelor\u2019s in Computer Science",
+        "institution": "National University of Science and Technology (NUST)",
+        "year": "2022 - 2026",
+        "place": "Islamabad, Pakistan",
+        "gpa": null,
+        "scale": 4.0,
+        "start": null,
+        "end": null,
+        "field": "Computer Science"
       },
       {
-        "title": "Software Engineer",
-        "company": "Robinhood",
-        "dates": "2019 - 2022",
-        "location": "Menlo Park, CA",
-        "achievements": [
-          "Built real-time trade execution engine handling 10M+ orders/day using Kotlin + Kafka",
-          "Implemented distributed locking system that reduced race conditions by 99.9%",
-          "Owned on-call for trading infrastructure (SLO 99.99%)",
-          "Reduced deployment time from 45min to under 5min via custom CI/CD tooling"
-        ]
-      },
-      {
-        "title": "Backend Engineer",
-        "company": "Coinbase",
-        "dates": "2017 - 2019",
-        "location": "San Francisco, CA",
-        "achievements": [
-          "Developed internal transfer service processing $2B+ monthly volume",
-          "Implemented database sharding strategy that scaled PostgreSQL writes 8x"
-        ]
+        "degree": "Fsc. Pre-Engineering",
+        "institution": "Punjab Group of Colleges (PGC)",
+        "year": "2020 - 2022",
+        "place": "Lahore, Pakistan",
+        "gpa": null,
+        "scale": 4.0,
+        "start": null,
+        "end": null,
+        "field": "Engineering"
       }
     ],
-    "education": {
-      "degree": "B.S. Computer Science",
-      "school": "University of California, Berkeley",
-      "graduation": "2017",
-      "gpa": "3.8/4.0"
-    },
-    "skills": [
-      "Languages: Go (expert), Kotlin/Java (expert), Python, TypeScript",
-      "Infrastructure: Kubernetes, Docker, AWS, GCP, Terraform",
-      "Data: PostgreSQL, DynamoDB, Redis, Kafka, Elasticsearch",
-      "Practices: System Design, Observability, On-call, Mentoring"
+    "projects": [
+      {
+        "title": "Implementation of LTR in Solr",
+        "role": "Team Player",
+        "description": [
+          "Programmed a LTR model for Apache Solr",
+          "Designed LTR Model, Configured Solr LTR Plugins and Programmed Machine learning model to implement the LTR Algorithm which gives the 80% accuracy."
+        ],
+        "duration": "April 2025 \u2013 May 2025",
+        "year": null
+      },
+      {
+        "title": "Completion of ML Certification",
+        "role": null,
+        "description": [
+          "Completed all assignments with 100% score and built ML models from scratch, gaining strong conceptual understanding."
+        ],
+        "duration": "Feb 2025",
+        "year": null
+      }
     ],
-    "open_source": [
-      "Creator of go-retry (12k GitHub stars)",
-      "Regular contributor to Kubernetes and Prometheus projects"
+    "experience": [
+      {
+        "title": "Career-Prep Fellow",
+        "role": "Career-Prep Fellow",
+        "company": "AMAL ACADEMY",
+        "place": "Islamabad, Pakistan",
+        "description": [
+          "Education startup funded by Stanford University that teaches professional skills to students and corporations",
+          "Cooperating with a team on a community-focused project to repurpose organic waste for sustainable plantation and environmental benefit.",
+          "Collaborating with a diverse team to conduct a research project on waste management, identifying local environmental issues and proposing actionable solutions"
+        ],
+        "duration": "May 2025 \u2013 Present",
+        "start": null,
+        "end": null,
+        "duration_months": null
+      }
+    ],
+    "extracurricular": [
+      {
+        "title": "Cultural Festival",
+        "role": null,
+        "description": [
+          "Managed the music system and supported the de\u0301cor team, demonstrating reliable execution and strong teamwork in a fast-paced event environment."
+        ],
+        "duration": null,
+        "place": "Islamabad, Pakistan"
+      }
+    ],
+    "certifications": [
+      {
+        "title": "Machine Learning Specialization",
+        "platform": "Coursera",
+        "link": null,
+        "duration": "Feb 2025"
+      }
+    ],
+    "publications": [],
+    "awards": [],
+    "interests": [
+      "AI",
+      "Robotics",
+      "Embedded Systems"
+    ],
+    "Skills": [
+      "Scikit-learn",
+      "OpenCV",
+      "Llama",
+      "PyTorch",
+      "Python",
+      "TensorFlow"
     ]
-  }
 }

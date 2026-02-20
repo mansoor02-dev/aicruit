@@ -1,21 +1,17 @@
-"""
-Conversation Manager - Enhanced for realistic interview flow
-"""
 from typing import List, Dict, Optional
 from dataclasses import dataclass, field
-from datetime import datetime
-
+from datetime import datetime, timezone
 
 @dataclass
 class Turn:
     """Single Q&A turn in the conversation"""
     question: str
     answer: str
-    evaluation: Dict  # {pass, depth_score, confidence, feedback, answer_length}
+    evaluation: Dict  
     is_followup: bool
     topic: Optional[str] = None
     question_metadata: Optional[Dict] = None  # From question generator
-    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
 class ConversationManager:
@@ -158,7 +154,6 @@ class ConversationManager:
                 "percentage": 0.0,
                 "topics_covered": 0
             }
-        
         passed_count = sum(1 for t in self.history if t.evaluation.get("pass", False))
         avg_depth = sum(t.evaluation.get("depth_score", 0) for t in self.history) / len(self.history)
         
@@ -184,8 +179,8 @@ class ConversationManager:
                 "questions_asked": self.get_questions_asked(),
                 "total_turns": self.get_total_turns(),
                 "topics_covered": self.get_topics_covered_list(),
-                "score": self.total_points,
-                "max_score": self.max_possible
+                "score": round(self.total_points, 3),
+                "max_score": round(self.max_possible, 3)
             },
             "conversation_history": [
                 {
@@ -210,12 +205,12 @@ class ConversationManager:
         print("\n" + "=" * 60)
         print("   INTERVIEW SUMMARY")
         print("=" * 60)
-        print(f"\n📊 Questions Asked: {perf['questions_asked']}/{self.total_questions}")
-        print(f"💬 Total Turns (w/ follow-ups): {perf['total_turns']}")
-        print(f"✓ Passed: {perf['passed']} | ✗ Failed: {perf['failed']}")
-        print(f"🎯 Score: {perf['score']:.1f}/{perf['max_score']:.1f} ({perf['percentage']}%)")
-        print(f"📈 Average Depth: {perf['average_depth']:.2f}")
-        print(f"📚 Topics Covered: {perf['topics_covered']}")
+        print(f"\nQuestions Asked: {perf['questions_asked']}/{self.total_questions}")
+        print(f"Total Turns (w/ follow-ups): {perf['total_turns']}")
+        print(f"Passed: {perf['passed']} | Failed: {perf['failed']}")
+        print(f"Score: {perf['score']:.1f}/{perf['max_score']:.1f} ({perf['percentage']}%)")
+        print(f"Average Depth: {perf['average_depth']:.2f}")
+        print(f"Topics Covered: {perf['topics_covered']}")
         
         if self.topics_covered:
             print(f"\nTopics: {', '.join(self.get_topics_covered_list())}")
@@ -226,11 +221,9 @@ class ConversationManager:
 # ========== USAGE EXAMPLE ==========
 if __name__ == "__main__":
     manager = ConversationManager(total_questions=3)
-    
-    # Simulate interview
+
     print("=== SIMULATED INTERVIEW ===\n")
-    
-    # Turn 1: New question
+
     manager.add_turn(
         question="What is polymorphism in OOP?",
         answer="It's when objects can take multiple forms.",
@@ -238,17 +231,13 @@ if __name__ == "__main__":
         is_followup=False,
         topic="Object-Oriented Programming",
         metadata={"difficulty": "medium", "category": "OOP"}
-    )
-    
-    # Turn 2: Follow-up
+    )    
     manager.add_turn(
         question="Can you give me a concrete example?",
         answer="Like a shape class that can be a circle or square.",
         evaluation={"pass": True, "depth_score": 0.7, "confidence": 0.6, "feedback": "Better", "answer_length": 10},
         is_followup=True
     )
-    
-    # Turn 3: New question
     manager.add_turn(
         question="What is a linked list?",
         answer="A data structure where elements are connected with pointers to next element.",
@@ -257,16 +246,10 @@ if __name__ == "__main__":
         topic="Data Structures",
         metadata={"difficulty": "easy", "category": "Data Structures"}
     )
-    
-    # Show state
     print(f"Questions asked: {manager.get_questions_asked()}/3")
     print(f"Current topic: {manager.current_topic}")
     print(f"Topic depth: {manager.get_current_topic_depth()}")
     print(f"Complete: {manager.is_complete()}")
-    
-    # Show summary
     manager.print_summary()
-    
-    # Show conversation context
     print("\n=== RECENT CONVERSATION ===")
     print(manager.get_conversation_summary(last_n=2))

@@ -1,0 +1,9 @@
+*.gguf
+models/llm/
+.env
+__pycache__
+*.pyc
+cache/
+logs/
+*.log
+.dockerignore

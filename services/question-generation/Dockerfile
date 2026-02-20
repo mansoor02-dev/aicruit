@@ -1,56 +1,64 @@
-# Dockerfile
-FROM python:3.12-slim
+# ===============================
+# Builder stage
+# ===============================
+FROM python:3.12-slim AS builder
 
-# Prevent interactive prompts + optimize Python
 ENV DEBIAN_FRONTEND=noninteractive \
-    PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONDONTWRITEBYTECODE=1
 
-# Install build dependencies
+# Install build dependencies needed to build wheels
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         build-essential \
         gcc \
         g++ \
-        cmake \
         git \
-        curl \
-        pkg-config \
-        libopenblas-dev \
-        libomp-dev \
-        && rm -rf /var/lib/apt/lists/*
+        libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
 
-# Create app directory
 WORKDIR /app
 
-# Copy requirements
-COPY requirements.txt .
+# Copy requirements first for better caching
+COPY requirements.txt ./
 
-# Install Python packages with special handling for llama-cpp-python
+# Build wheels for all requirements to speed up installation in runtime image
+RUN pip install --upgrade pip setuptools wheel && \
+    pip wheel --wheel-dir /wheels -r requirements.txt
+
+
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+
+# Runtime-only system deps
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd -m appuser || true
+
+WORKDIR /app
+
+# Copy wheels from builder and install
+COPY --from=builder /wheels /wheels
+COPY requirements.txt ./
 RUN pip install --upgrade pip && \
-    \
-    # First install everything EXCEPT llama-cpp-python
-    grep -v "llama-cpp-python" requirements.txt | xargs pip install --no-cache-dir && \
-    \
-    # Now install llama-cpp-python with modern CPU support
-    CMAKE_ARGS="-DLLAMA_BLAS=ON -DLLAMA_BLAS_VENDOR=OpenBLAS -DLLAMA_AVX2=ON -DLLAMA_FMA=ON -DLLAMA_F16C=ON" \
-    FORCE_CMAKE=1 \
-    pip install --no-cache-dir --force-reinstall --no-binary=llama-cpp-python llama-cpp-python
+    pip install --no-index --find-links /wheels -r requirements.txt
 
-# Copy project
+# Copy application code
 COPY . .
 
-# Create required directories
-RUN mkdir -p cache logs models/llm
+# Create logs directory and set permissions
+RUN mkdir -p logs && chown -R appuser:appuser /app
 
-# Download model if not exists (optional but recommended)
-# RUN if [ ! -f models/llm/Phi-3-mini-4k-instruct-q4.gguf ]; then \
-#     curl -L -o models/llm/Phi-3-mini-4k-instruct-q4.gguf \
-#     https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/resolve/main/Phi-3-mini-4k-instruct-q4.gguf; \
-#     fi
+USER appuser
 
-EXPOSE 8000
+EXPOSE 8010
 
-# Run the API (not main.py — you want the FastAPI server)
-CMD ["uvicorn", "app.api:app", "--host", "0.0.0.0", "--port", "8000"]
+# Start the FastAPI app
+CMD ["uvicorn", "app.api:app", "--host", "0.0.0.0", "--port", "8010", "--proxy-headers"]

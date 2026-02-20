@@ -1,8 +1,3 @@
-"""
-Flow Controller - Decides when to follow-up vs ask new questions
-
-This is the BRAIN of the realistic interviewer system.
-"""
 import random
 from typing import Dict, Optional, Literal
 from dataclasses import dataclass
@@ -44,9 +39,9 @@ class FlowController:
         self,
         evaluation: Dict,
         topic_depth: int,  # How many follow-ups already on this topic
-        questions_asked: int,  # Total main questions asked
         total_questions: int,  # Target total
-        topics_covered: list  # What topics already discussed
+        topics_covered: list,  # What topics already discussed
+        questions_asked: int = 0,  # Total main questions asked
     ) -> FlowDecision:
         """
         Main decision logic - realistic interviewer behavior
@@ -174,7 +169,6 @@ class FlowController:
     def get_followup_prompt_template(self, angle: str) -> str:
         """
         Get prompt template for different follow-up angles
-        
         Returns a template that question_generator.py can use
         """
         templates = {
