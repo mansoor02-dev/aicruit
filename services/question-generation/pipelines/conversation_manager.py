@@ -207,16 +207,15 @@ class ConversationManager:
         print("=" * 60)
         print(f"\nQuestions Asked: {perf['questions_asked']}/{self.total_questions}")
         print(f"Total Turns (w/ follow-ups): {perf['total_turns']}")
-        print(f"Passed: {perf['passed']} | Failed: {perf['failed']}")
-        print(f"Score: {perf['score']:.1f}/{perf['max_score']:.1f} ({perf['percentage']}%)")
-        print(f"Average Depth: {perf['average_depth']:.2f}")
-        print(f"Topics Covered: {perf['topics_covered']}")
+        print(f"Passed: {perf.get('passed', 0)} | Failed: {perf.get('failed', 0)}")
+        print(f"Score: {perf['score']:.1f}/{perf.get('max_score', 0):.1f} ({perf['percentage']}%)")
+        print(f"Average Depth: {perf.get('average_depth', 0.0):.2f}")
+        print(f"Topics Covered: {perf.get('topics_covered', 0)}")
         
         if self.topics_covered:
             print(f"\nTopics: {', '.join(self.get_topics_covered_list())}")
         
         print("=" * 60 + "\n")
-
 
 # ========== USAGE EXAMPLE ==========
 if __name__ == "__main__":

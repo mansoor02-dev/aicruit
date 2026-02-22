@@ -4,8 +4,6 @@ from typing import List, Dict, Tuple
 from pipelines.llm_loader import LLMLoader
 import json
 
-def get_test_llm():
-    return LLMLoader(model_type="gemini").get_llm()
 
 class QuestionGenerator:
     def __init__(
@@ -55,21 +53,21 @@ class QuestionGenerator:
         
         candidates = [
             q for q in self.dataset 
-            if q["difficulty"].lower() == difficulty.lower()
-            and q["id"] not in self.used_question_ids
+            if (q.get("Difficulty", "")).lower() == difficulty.lower()
+            and (q.get("Id") not in self.used_question_ids)
         ]
 
         if len(candidates) < 3:
             candidates = [
                 q for q in self.dataset
-                if q["difficulty"].lower() == difficulty.lower()
+                if (q.get("Difficulty", "")).lower() == difficulty.lower()
             ]
         
         # If still empty, relax difficulty
         if not candidates:
             candidates = [
                 q for q in self.dataset
-                if q["id"] not in self.used_question_ids
+                if (q.get("Id") not in self.used_question_ids)
             ]
         
         if not candidates:
@@ -78,36 +76,39 @@ class QuestionGenerator:
         # Prefer topics not recently covered
         fresh_candidates = [
             q for q in candidates
-            if q.get("category") not in topics_covered[-3:]  # Last 3 topics
+            if q.get("Category") not in topics_covered[-3:]  # Last 3 topics
         ]
         
         pool = fresh_candidates if fresh_candidates else candidates
         selected = random.choice(pool)
         
         # Mark as used
-        self.used_question_ids.add(selected["id"])
+        selected_id = selected.get("Id")
+        if selected_id is not None:
+            self.used_question_ids.add(selected_id)
         
         # Get the question (use dataset or LLM-rephrase if resume available)
         if resume_json:
             # LLM-generated based on candidate context
+            base_q = selected.get("Question", selected.get("question", ""))
             question_text = self._generate_contextual_question(
-                base_question=selected["question"],
-                category=selected.get("category", "Software Engineering"),
+                base_question=base_q,
+                category=selected.get("Category", "Software Engineering"),
                 resume_json=resume_json,
-                evaluation_result=evaluation_result
+                # evaluation_result=evaluation_result
             )
         else:
             # Use dataset question with optional rephrasing
             question_text = self._maybe_rephrase_question(
-                selected["question"],
+                selected.get("Question", selected.get("question", "")),
             )
         
         metadata = {
             "source": "dataset_inspired" if (resume_json) else "dataset",
-            "question_id": selected["id"],
-            "category": selected.get("category", "Unknown"),
-            "difficulty": selected.get("difficulty", "medium"),
-            "reference_answer": selected.get("answer", ""),
+            "question_id": selected.get("Id"),
+            "category": selected.get("Category", "Unknown"),
+            "difficulty": selected.get("Difficulty", "medium"),
+            "reference_answer": selected.get("Answer", ""),
             "is_followup": False
         }
         
@@ -130,7 +131,6 @@ class QuestionGenerator:
             previous_answer: Candidate's answer
             resume_json: Candidate resume dict (for contextual probes)
             evaluation_result: Evaluation of previous answer (contains decision/score)
-            difficulty: Desired difficulty for follow-up
         
         Returns:
             (question_text, metadata)
@@ -200,14 +200,14 @@ Question:"""
             if not self._is_valid_followup(question_text, previous_answer):
                 # Fallback to template-based follow-up
                 question_text = self._template_followup(
-                    previous_answer, 
+                    # previous_answer, 
                     followup_angle
                 )
         
         except Exception as e:
             print(f"⚠️ LLM follow-up generation failed: {e}")
             question_text = self._template_followup(
-                previous_answer,
+                # previous_answer,
                 followup_angle
             )
         
@@ -266,7 +266,6 @@ Your follow-up questions must be:
             base_question: Base question from dataset
             category: Question category
             resume_json: Candidate resume
-            job_description: Job description
             evaluation_result: Optional evaluation context
         
         Returns:
@@ -417,7 +416,7 @@ Question:"""
         Only rephrase ~30% of the time to maintain consistency
         """
         
-        if random.random() > 0.3:
+        if random.random() > 0.4:
             return question  # Use as-is
         
         # Simple rephrasing: add conversational prefix
@@ -438,30 +437,29 @@ if __name__ == "__main__":
     # Mock data for testing
     mock_dataset = [
         {
-            "id": 1,
-            "question": "What is the difference between compilation and interpretation?",
-            "answer": "Compilation translates source code into machine code...",
-            "category": "General Programming",
-            "difficulty": "medium"
+            "Id": 1,
+            "Question": "What is the difference between compilation and interpretation?",
+            "Answer": "Compilation translates source code into machine code...",
+            "Category": "General Programming",
+            "Difficulty": "medium"
         },
         {
-            "id": 2,
-            "question": "Explain polymorphism in OOP.",
-            "answer": "Polymorphism allows objects of different types...",
-            "category": "Object-Oriented Programming",
-            "difficulty": "medium"
+            "Id": 2,
+            "Question": "Explain polymorphism in OOP.",
+            "Answer": "Polymorphism allows objects of different types...",
+            "Category": "Object-Oriented Programming",
+            "Difficulty": "medium"
         }
     ]
     
-    with open("data/temp/job_description.json") as f:
-        job_desc = json.load(f)["text"]     
+    # with open("data/temp/job_description.json") as f:
+    #     job_desc = json.load(f)["job_description"]    
     with open("data/temp/sample_resume.json") as f:
-        resume = json.load(f)["text"]
+        resume = json.load(f)
     
     generator = QuestionGenerator(
-        llm=get_test_llm(),
+        model_type="gemini",
         candidate_resume=resume,
-        job_description=job_desc,
         dataset_questions=mock_dataset,
         difficulty="easy"
     )
@@ -479,9 +477,9 @@ if __name__ == "__main__":
     print("=== FOLLOW-UP QUESTION ===")
     followup_q, followup_meta = generator.generate_followup_question(
         previous_question="What is the difference between compilation and interpretation?",
-        previous_answer="Compilation is when you turn code into binary.",
-        followup_angle="examples",
-        evaluation={"pass": False, "depth_score": 0.4}
+        previous_answer="I am not fimiliar with those concepts.",
+        resume_json=resume,
+        evaluation_result={"pass": False, "depth_score": 0.4}
     )
     print(f"Follow-up: {followup_q}")
     print(f"Metadata: {followup_meta}")

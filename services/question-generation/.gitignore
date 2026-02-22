@@ -1,4 +1,3 @@
-*.gguf
 models/llm/
 .env
 __pycache__

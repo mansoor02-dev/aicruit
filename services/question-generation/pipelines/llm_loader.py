@@ -70,7 +70,7 @@ class OpenRouterChat:
 
 class GeminiChat:
     """Wrapper for Google Gemini API using new google-genai package"""
-    def __init__(self, model_name: str = "gemini-2.0-flash-exp"):
+    def __init__(self, model_name: str = "gemini-2.5-flash"):
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             raise ValueError("GEMINI_API_KEY environment variable not set")
