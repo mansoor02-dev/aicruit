@@ -9,26 +9,17 @@
     },
     "education": [
       {
-        "degree": "Bachelor\u2019s in Computer Science",
+        "degree": "Bachelor's in Computer Science",
         "institution": "National University of Science and Technology (NUST)",
         "year": "2022 - 2026",
         "place": "Islamabad, Pakistan",
-        "gpa": null,
-        "scale": 4.0,
-        "start": null,
-        "end": null,
         "field": "Computer Science"
       },
       {
         "degree": "Fsc. Pre-Engineering",
         "institution": "Punjab Group of Colleges (PGC)",
         "year": "2020 - 2022",
-        "place": "Lahore, Pakistan",
-        "gpa": null,
-        "scale": 4.0,
-        "start": null,
-        "end": null,
-        "field": "Engineering"
+        "place": "Lahore, Pakistan"
       }
     ],
     "projects": [
@@ -39,17 +30,14 @@
           "Programmed a LTR model for Apache Solr",
           "Designed LTR Model, Configured Solr LTR Plugins and Programmed Machine learning model to implement the LTR Algorithm which gives the 80% accuracy."
         ],
-        "duration": "April 2025 \u2013 May 2025",
-        "year": null
+        "duration": "April 2025 May 2025"
       },
       {
         "title": "Completion of ML Certification",
-        "role": null,
         "description": [
           "Completed all assignments with 100% score and built ML models from scratch, gaining strong conceptual understanding."
         ],
-        "duration": "Feb 2025",
-        "year": null
+        "duration": "Feb 2025"
       }
     ],
     "experience": [
@@ -63,20 +51,18 @@
           "Cooperating with a team on a community-focused project to repurpose organic waste for sustainable plantation and environmental benefit.",
           "Collaborating with a diverse team to conduct a research project on waste management, identifying local environmental issues and proposing actionable solutions"
         ],
-        "duration": "May 2025 \u2013 Present",
-        "start": null,
-        "end": null,
-        "duration_months": null
+        "duration": "May 2025 Present",
+        "duration_months": 3
       }
     ],
     "extracurricular": [
       {
         "title": "Cultural Festival",
-        "role": null,
+        "role": "Executive",
         "description": [
-          "Managed the music system and supported the de\u0301cor team, demonstrating reliable execution and strong teamwork in a fast-paced event environment."
+          "Managed the music system and supported the decor team, demonstrating reliable execution and strong teamwork in a fast-paced event environment."
         ],
-        "duration": null,
+        "duration": "March 2023",
         "place": "Islamabad, Pakistan"
       }
     ],
@@ -84,7 +70,6 @@
       {
         "title": "Machine Learning Specialization",
         "platform": "Coursera",
-        "link": null,
         "duration": "Feb 2025"
       }
     ],
