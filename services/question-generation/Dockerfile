@@ -22,33 +22,14 @@ WORKDIR /app
 # Copy requirements first for better caching
 COPY requirements.txt ./
 
-# Build wheels for all requirements to speed up installation in runtime image
-RUN pip install --upgrade pip setuptools wheel && \
-    pip wheel --wheel-dir /wheels -r requirements.txt
+# Install Python packages with special handling for llama-cpp-python
+# Set hardware acceleration flags for CPU
+ENV CMAKE_ARGS="-DLLAMA_BLAS=ON -DLLAMA_BLAS_VENDOR=OpenBLAS -DLLAMA_AVX2=ON -DLLAMA_FMA=ON -DLLAMA_F16C=ON"
+ENV FORCE_CMAKE=1
 
-
-FROM python:3.12-slim
-
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1
-
-# Runtime-only system deps
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        libgomp1 \
-    && rm -rf /var/lib/apt/lists/*
-
-# Create non-root user
-RUN useradd -m appuser || true
-
-WORKDIR /app
-
-# Copy wheels from builder and install
-COPY --from=builder /wheels /wheels
-COPY requirements.txt ./
+# Install requirements, forcing source build for llama-cpp-python to apply optimizations
 RUN pip install --upgrade pip && \
-    pip install --no-index --find-links /wheels -r requirements.txt
+    pip install --no-cache-dir -r requirements.txt --no-binary=llama-cpp-python
 
 # Copy application code
 COPY . .
@@ -56,9 +37,7 @@ COPY . .
 # Create logs directory and set permissions
 RUN mkdir -p logs && chown -R appuser:appuser /app
 
-USER appuser
+EXPOSE 8000
 
-EXPOSE 8010
-
-# Start the FastAPI app
-CMD ["uvicorn", "app.api:app", "--host", "0.0.0.0", "--port", "8010", "--proxy-headers"]
+# Run the API
+CMD ["uvicorn", "app.api:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -134,6 +134,21 @@ services:
       - file-service
     restart: always
 
+  question-generation:
+    build:
+      context: ../../services/question-generation
+    container_name: aicruit_question_generation
+    ports:
+      - "8008:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://admin:admin123@postgres:5432/aicruit
+    depends_on:
+      - postgres
+    volumes:
+      - ../../services/question-generation/models:/app/models
+      - ../../services/question-generation/data:/app/data
+      - ../../services/question-generation/logs:/app/logs
+
 volumes:
   pgdata:
   pgadmin_data:
