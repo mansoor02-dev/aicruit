@@ -28,15 +28,13 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Install Python packages with special handling for llama-cpp-python
+# Set hardware acceleration flags for CPU
+ENV CMAKE_ARGS="-DLLAMA_BLAS=ON -DLLAMA_BLAS_VENDOR=OpenBLAS -DLLAMA_AVX2=ON -DLLAMA_FMA=ON -DLLAMA_F16C=ON"
+ENV FORCE_CMAKE=1
+
+# Install requirements, forcing source build for llama-cpp-python to apply optimizations
 RUN pip install --upgrade pip && \
-    \
-    # First install everything EXCEPT llama-cpp-python
-    grep -v "llama-cpp-python" requirements.txt | xargs pip install --no-cache-dir && \
-    \
-    # Now install llama-cpp-python with modern CPU support
-    CMAKE_ARGS="-DLLAMA_BLAS=ON -DLLAMA_BLAS_VENDOR=OpenBLAS -DLLAMA_AVX2=ON -DLLAMA_FMA=ON -DLLAMA_F16C=ON" \
-    FORCE_CMAKE=1 \
-    pip install --no-cache-dir --force-reinstall --no-binary=llama-cpp-python llama-cpp-python
+    pip install --no-cache-dir -r requirements.txt --no-binary=llama-cpp-python
 
 # Copy project
 COPY . .
@@ -44,13 +42,7 @@ COPY . .
 # Create required directories
 RUN mkdir -p cache logs models/llm
 
-# Download model if not exists (optional but recommended)
-# RUN if [ ! -f models/llm/Phi-3-mini-4k-instruct-q4.gguf ]; then \
-#     curl -L -o models/llm/Phi-3-mini-4k-instruct-q4.gguf \
-#     https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/resolve/main/Phi-3-mini-4k-instruct-q4.gguf; \
-#     fi
-
 EXPOSE 8000
 
-# Run the API (not main.py — you want the FastAPI server)
+# Run the API
 CMD ["uvicorn", "app.api:app", "--host", "0.0.0.0", "--port", "8000"]
