@@ -1,14 +1,10 @@
-sentence-transformers
-fastapi
-uvicorn[standard]
-asyncpg
-psycopg2-binary
-pydantic
 faiss-cpu
-numpy
-pandas
-tqdm
-# LLM
-llama-cpp-python
-# APIs
-google-genai
+fastapi==0.115.5
+uvicorn==0.32.1
+pydantic==2.10.3
+numpy==1.26.4
+pandas==2.2.3
+python-dotenv==1.0.1
+openai==1.57.2
+google-genai==0.2.2
+sentence-transformers==3.3.1

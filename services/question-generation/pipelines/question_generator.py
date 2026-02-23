@@ -1,485 +1,276 @@
+import json
 import random
 import re
-from typing import List, Dict, Tuple
+from typing import Dict, List, Optional, Tuple
+
 from pipelines.llm_loader import LLMLoader
-import json
+
+_FOLLOWUP_ANGLE_MAP = {
+    "deep_dive": "implementation_details",
+    "same_topic": "elaboration",
+}
+
+_ANGLE_GOAL = {
+    "elaboration":           "Get more detail and depth from their answer.",
+    "clarification":         "Clarify vague or ambiguous points.",
+    "examples":              "Request concrete examples or use cases.",
+    "implementation_details":"Probe how they would actually implement or apply this.",
+    "tradeoffs":             "Explore alternatives, trade-offs, or limitations.",
+    "edge_cases":            "Test handling of edge cases or failure scenarios.",
+}
+
+_FALLBACK_TEMPLATES: Dict[str, List[str]] = {
+    "elaboration":            ["Can you elaborate on that?", "Can you explain that in more detail?", "Could you expand on your answer?"],
+    "clarification":          ["What exactly do you mean by that?", "Can you clarify that point?", "Could you be more specific?"],
+    "examples":               ["Can you give me a concrete example?", "What's a practical use case for this?", "Can you show how that would work in practice?"],
+    "implementation_details": ["How would you actually implement that?", "Walk me through your approach step by step.", "What would the code look like?"],
+    "tradeoffs":              ["What are the trade-offs of that approach?", "How does this compare to alternatives?", "What are the downsides?"],
+    "edge_cases":             ["What could go wrong with that approach?", "How would you handle edge cases?", "What if the input is invalid?"],
+}
+
+_CONVERSATIONAL_PREFIXES = ["", "Let me ask you this: ", "Here's a question: ", "I'd like to know: ", "Quick question: "]
 
 
 class QuestionGenerator:
+    """Generates interview questions — new topics and contextual follow-ups."""
+
     def __init__(
         self,
         dataset_questions: List[Dict],
-        model_type: str = 'openrouter',
-        candidate_resume: str = "",    
-        difficulty: str = "easy",
-        retriever=None
+        model_type: str = "openrouter",
+        difficulty: str = "medium",
     ):
         self.dataset = dataset_questions
-        # Only initialize LLM if not provided (lazy initialization)
         self.llm = LLMLoader(model_type=model_type).get_llm()
-        self.candidate_resume = candidate_resume      
-        self.retriever = retriever
         self.difficulty = difficulty
-        # Cache used questions to avoid repetition
-        self.used_question_ids = set()
-    
+        self.used_question_ids: set = set()
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
     def generate_new_topic_question(
         self,
-        topics_covered: List[str] = None,
-        difficulty: str = None,
-        resume_json: Dict = None,
-        evaluation_result: Dict = None
+        topics_covered: Optional[List[str]] = None,
+        difficulty: Optional[str] = None,
+        resume_json: Optional[Dict] = None,
     ) -> Tuple[str, Dict]:
         """
-        Generate a NEW TOPIC question (not a follow-up)
-        
-        Strategy:
-        1. Filter dataset by difficulty
-        2. Avoid recently covered topics
-        3. Pick a question from dataset as inspiration
-        4. Use LLM to generate/rephrase for resume/job context (optional)
-        
-        Args:
-            topics_covered: List of topics already discussed
-            difficulty: Desired difficulty level
-            resume_json: Candidate resume dict (injected at generation time)
-            evaluation_result: Previous evaluation result (optional context)
-        
-        Returns:
-            (question_text, metadata)
+        Pick a question from the dataset (filtered by difficulty, avoiding
+        already-covered topics), optionally personalising it via LLM when a
+        resume is provided.
         """
         topics_covered = topics_covered or []
-        difficulty = difficulty or self.difficulty
-        
-        candidates = [
-            q for q in self.dataset 
-            if (q.get("Difficulty", "")).lower() == difficulty.lower()
-            and (q.get("Id") not in self.used_question_ids)
-        ]
+        difficulty = (difficulty or self.difficulty).lower()
 
-        if len(candidates) < 3:
-            candidates = [
-                q for q in self.dataset
-                if (q.get("Difficulty", "")).lower() == difficulty.lower()
-            ]
-        
-        # If still empty, relax difficulty
-        if not candidates:
-            candidates = [
-                q for q in self.dataset
-                if (q.get("Id") not in self.used_question_ids)
-            ]
-        
-        if not candidates:
-            candidates = self.dataset  # Last resort
-        
-        # Prefer topics not recently covered
-        fresh_candidates = [
-            q for q in candidates
-            if q.get("Category") not in topics_covered[-3:]  # Last 3 topics
-        ]
-        
-        pool = fresh_candidates if fresh_candidates else candidates
-        selected = random.choice(pool)
-        
-        # Mark as used
-        selected_id = selected.get("Id")
-        if selected_id is not None:
-            self.used_question_ids.add(selected_id)
-        
-        # Get the question (use dataset or LLM-rephrase if resume available)
+        selected = self._pick_question(topics_covered, difficulty)
+
+        base_q = selected.get("Question") or selected.get("question", "")
         if resume_json:
-            # LLM-generated based on candidate context
-            base_q = selected.get("Question", selected.get("question", ""))
             question_text = self._generate_contextual_question(
                 base_question=base_q,
                 category=selected.get("Category", "Software Engineering"),
                 resume_json=resume_json,
-                # evaluation_result=evaluation_result
             )
+            source = "dataset_inspired"
         else:
-            # Use dataset question with optional rephrasing
-            question_text = self._maybe_rephrase_question(
-                selected.get("Question", selected.get("question", "")),
-            )
-        
+            question_text = self._maybe_rephrase(base_q)
+            source = "dataset"
+
         metadata = {
-            "source": "dataset_inspired" if (resume_json) else "dataset",
+            "source": source,
             "question_id": selected.get("Id"),
             "category": selected.get("Category", "Unknown"),
             "difficulty": selected.get("Difficulty", "medium"),
             "reference_answer": selected.get("Answer", ""),
-            "is_followup": False
+            "is_followup": False,
         }
-        
         return question_text, metadata
-    
+
     def generate_followup_question(
         self,
         previous_question: str,
         previous_answer: str,
-        resume_json: Dict = None,
-        evaluation_result: Dict = None,
+        evaluation_result: Optional[Dict] = None,
+        resume_json: Optional[Dict] = None,
     ) -> Tuple[str, Dict]:
         """
-        Generate a FOLLOW-UP question based on previous Q&A
-        
-        This is where LLM shines - generating contextual probes
-        
-        Args:
-            previous_question: The question candidate just answered
-            previous_answer: Candidate's answer
-            resume_json: Candidate resume dict (for contextual probes)
-            evaluation_result: Evaluation of previous answer (contains decision/score)
-        
-        Returns:
-            (question_text, metadata)
+        Generate a contextual follow-up question using the LLM, with a
+        template-based fallback.
         """
-        
-        # Determine followup angle from evaluation decision
-        if evaluation_result:
-            decision = evaluation_result.get("decision", "same_topic").lower()
-        else:
-            decision = "same_topic"
-        
-        # Map decision to followup angle
-        if decision == "deep_dive":
-            followup_angle = "implementation_details"
-        elif decision == "same_topic":
-            followup_angle = "elaboration"
-        else:
-            followup_angle = "elaboration"
-        
-        system_prompt = self._get_followup_system_prompt(
-            followup_angle,
-            resume_json,
-        )
-        
-        user_prompt = f"""Previous question: {previous_question}
+        decision = (evaluation_result or {}).get("decision", "same_topic").lower()
+        angle = _FOLLOWUP_ANGLE_MAP.get(decision, "elaboration")
 
-Candidate's answer: {previous_answer}
+        system_prompt = self._followup_system_prompt(angle, resume_json)
+        user_prompt = self._followup_user_prompt(previous_question, previous_answer, evaluation_result)
 
-"""
-        
-        if evaluation_result:
-            user_prompt += f"""Evaluation:
-- Decision: {evaluation_result.get('decision', 'unknown')}
-- Score: {evaluation_result.get('score_value', 0.5):.2f}
-- Remarks: {evaluation_result.get('remarks', '')}
+        question_text = self._call_llm_for_question(system_prompt, user_prompt)
 
-"""
-        
-        user_prompt += """Generate ONE natural follow-up question that probes deeper.
-Rules:
-1. Must be directly related to the previous answer
-2. Maximum 25 words
-3. Natural interview style (conversational)
-4. No preamble - just the question
-5. End with question mark
+        # Validate; fall back to template if invalid
+        if not self._is_valid_followup(question_text, previous_answer):
+            question_text = random.choice(_FALLBACK_TEMPLATES.get(angle, _FALLBACK_TEMPLATES["elaboration"]))
 
-Question:"""
-
-        try:
-            response = self.llm(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=0.6,  # Some creativity for natural follow-ups
-                max_tokens=150,
-                top_p=0.9,
-                repeat_penalty=1.1
-            )
-            
-            question_text = response["choices"][0]["message"]["content"].strip()
-            
-            # Clean up
-            question_text = self._clean_generated_question(question_text)
-            
-            # Validate
-            if not self._is_valid_followup(question_text, previous_answer):
-                # Fallback to template-based follow-up
-                question_text = self._template_followup(
-                    # previous_answer, 
-                    followup_angle
-                )
-        
-        except Exception as e:
-            print(f"⚠️ LLM follow-up generation failed: {e}")
-            question_text = self._template_followup(
-                # previous_answer,
-                followup_angle
-            )
-        
         metadata = {
             "source": "llm_generated",
             "is_followup": True,
-            "followup_angle": followup_angle,
+            "followup_angle": angle,
             "based_on_question": previous_question,
-            "reference_answer": None,  # No ground truth for follow-ups
-            "includes_previous_qa": True
+            "reference_answer": None,
         }
-        
         return question_text, metadata
-    
-    def _get_followup_system_prompt(self, angle: str, resume_json: Dict = None) -> str:
-        """System prompts for different follow-up types"""
-        
-        resume_context = ""
-        if resume_json:
-            # Extract key resume info to include in prompt
-            resume_str = json.dumps(resume_json)[:500] if isinstance(resume_json, dict) else str(resume_json)[:500]
-            resume_context = f"\nCandidate Resume (Summary):\n{resume_str}\n"
-        
-        base = f"""You are a senior and skilled technical interviewer.
 
-{resume_context}
+    # ------------------------------------------------------------------
+    # Dataset helpers
+    # ------------------------------------------------------------------
 
-Your follow-up questions must be:
-- Directly relevant to the candidate's background and the JD requirements
-- Probing and insightful but conversational
-- Build naturally on their previous answer
-- Test depth of understanding
-"""
-        
-        angle_specific = {
-            "elaboration": "\nGoal: Get more detail and depth from their answer.",
-            "clarification": "\nGoal: Clarify vague or ambiguous points.",
-            "examples": "\nGoal: Request concrete examples or use cases.",
-            "implementation_details": "\nGoal: Probe how they would actually implement or apply this.",
-            "tradeoffs": "\nGoal: Explore alternatives, trade-offs, or limitations.",
-            "edge_cases": "\nGoal: Test handling of edge cases or failure scenarios."
-        }
-        
-        return base + angle_specific.get(angle, "")
-    
-    def _generate_contextual_question(
-        self,
-        base_question: str,
-        category: str,
-        resume_json: Dict = None,
-    ) -> str:
-        """
-        Use LLM to generate a contextual question based on base question + resume + job
-        
-        Args:
-            base_question: Base question from dataset
-            category: Question category
-            resume_json: Candidate resume
-            evaluation_result: Optional evaluation context
-        
-        Returns:
-            LLM-generated question text
-        """
-        
-        resume_str = json.dumps(resume_json)[:300] if resume_json and isinstance(resume_json, dict) else ""
-        
-        system_prompt = f"""You are a senior technical interviewer. Your questions must be:
-- Tailored to the candidate's background and the job requirements
-- Relevant to their specific experience
-- Natural and conversational
-- Technically sound
+    def _pick_question(self, topics_covered: List[str], difficulty: str) -> Dict:
+        """Select a question from the dataset, progressively relaxing constraints."""
+        # Preferred: correct difficulty, not yet used
+        pool = [
+            q for q in self.dataset
+            if q.get("Difficulty", "").lower() == difficulty
+            and q.get("Id") not in self.used_question_ids
+        ]
 
-Candidate Resume: {resume_str}
+        # Relax used-question constraint if pool too small
+        if len(pool) < 3:
+            pool = [q for q in self.dataset if q.get("Difficulty", "").lower() == difficulty]
 
-"""
-        
-        user_prompt = f"""Base question template: {base_question}
+        # Relax difficulty if still empty
+        if not pool:
+            pool = [q for q in self.dataset if q.get("Id") not in self.used_question_ids]
 
-Category: {category}
+        # Last resort: entire dataset
+        if not pool:
+            pool = self.dataset
 
-Generate ONE specific, natural interview question for this candidate based on their resume and the job.
-- Personalize it to their background
-- Example templates: "You mentioned X in your resume. Tell me about..."
-- No preamble, just the question
-- End with question mark
-- 15-30 words
+        # Prefer topics not in the last 3 covered
+        recent_topics = set(topics_covered[-3:])
+        fresh = [q for q in pool if q.get("Category") not in recent_topics]
+        selected = random.choice(fresh if fresh else pool)
 
-Question:"""
-        
+        q_id = selected.get("Id")
+        if q_id is not None:
+            self.used_question_ids.add(q_id)
+
+        return selected
+
+    def _maybe_rephrase(self, question: str) -> str:
+        """Add a conversational prefix ~40% of the time."""
+        if random.random() < 0.4:
+            prefix = random.choice(_CONVERSATIONAL_PREFIXES)
+            return f"{prefix}{question}" if prefix else question
+        return question
+
+    # ------------------------------------------------------------------
+    # LLM helpers
+    # ------------------------------------------------------------------
+
+    def _call_llm_for_question(self, system_prompt: str, user_prompt: str) -> str:
+        """Call LLM and return cleaned question text, or empty string on failure."""
         try:
             response = self.llm(
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
+                    {"role": "user", "content": user_prompt},
                 ],
-                temperature=0.7,
-                max_tokens=150
+                temperature=0.6,
+                max_tokens=150,
             )
-            
-            question_text = response["choices"][0]["message"]["content"].strip()
-            question_text = self._clean_generated_question(question_text)
-            
-            # Validate length
-            if len(question_text.split()) > 35:
-                # Too long, fallback to base question
-                return self._maybe_rephrase_question(base_question, category)
-            
-            return question_text
-        
+            raw = response["choices"][0]["message"]["content"].strip()
+            return self._clean_question(raw)
         except Exception as e:
-            print(f"⚠️ Contextual question generation failed: {e}")
-            return self._maybe_rephrase_question(base_question, category)
-    
-    def _clean_generated_question(self, text: str) -> str:
-        """Clean LLM-generated question text"""
-        
-        # Remove common artifacts
-        text = re.sub(r'^(Question:|Follow-up:|Q:)\s*', '', text, flags=re.IGNORECASE)
-        text = text.strip()
-        
-        # Ensure question mark
-        if text and not text.endswith('?'):
-            text += '?'
-        
-        # Take only first sentence if multiple
-        sentences = re.split(r'[.!?]', text)
-        if sentences:
-            text = sentences[0].strip()
-            if not text.endswith('?'):
-                text += '?'
-        
-        return text
-    
-    def _is_valid_followup(self, question: str, previous_answer: str) -> bool:
-        """Validate generated follow-up is reasonable"""
-        
-        # Basic checks
-        if not question or len(question) < 10:
-            return False
-        
-        if not question.endswith('?'):
-            return False
-        
-        if len(question.split()) > 30:  # Too long
-            return False
-        
-        # Check if question references something from answer
-        # Simple heuristic: share at least one meaningful word
-        q_words = set(re.findall(r'\b\w{4,}\b', question.lower()))
-        a_words = set(re.findall(r'\b\w{4,}\b', previous_answer.lower()))
-        
-        common_words = q_words & a_words
-        
-        # Should share at least 1-2 words (but not too many - that's copy-paste)
-        if len(common_words) < 1 or len(common_words) > 10:
-            return False
-        
-        return True
-    
-    def _template_followup(self, angle: str) -> str:
-        """
-        Fallback template-based follow-ups
-        Used when LLM generation fails
-        """
-        
-        templates = {
-            "elaboration": [
-                "Can you elaborate on that?",
-                "Can you explain that in more detail?",
-                "Could you expand on your answer?"
-            ],
-            "clarification": [
-                "What exactly do you mean by that?",
-                "Can you clarify that point?",
-                "Could you be more specific?"
-            ],
-            "examples": [
-                "Can you give me a concrete example?",
-                "What's a practical use case for this?",
-                "Can you show me how that would work in practice?"
-            ],
-            "implementation_details": [
-                "How would you actually implement that?",
-                "Walk me through your approach step by step.",
-                "What would the code look like?"
-            ],
-            "tradeoffs": [
-                "What are the trade-offs of that approach?",
-                "How does this compare to alternatives?",
-                "What are the downsides?"
-            ],
-            "edge_cases": [
-                "What could go wrong with that approach?",
-                "How would you handle edge cases?",
-                "What if the input is invalid?"
-            ]
-        }
-        
-        options = templates.get(angle, templates["elaboration"])
-        return random.choice(options)
-    
-    def _maybe_rephrase_question(self, question: str) -> str:
-        """
-        Optionally rephrase dataset question for variety
-        
-        Only rephrase ~30% of the time to maintain consistency
-        """
-        
-        if random.random() > 0.4:
-            return question  # Use as-is
-        
-        # Simple rephrasing: add conversational prefix
-        prefixes = [
-            "",  # No prefix
-            "Let me ask you this: ",
-            "Here's a question: ",
-            "I'd like to know: ",
-            "Quick question: "
+            print(f"⚠️  LLM question generation failed: {e}")
+            return ""
+
+    def _generate_contextual_question(
+        self, base_question: str, category: str, resume_json: Dict
+    ) -> str:
+        """Personalise a dataset question to the candidate's resume using the LLM."""
+        resume_str = json.dumps(resume_json)[:300] if isinstance(resume_json, dict) else str(resume_json)[:300]
+
+        system_prompt = (
+            f"You are a senior technical interviewer. Tailor questions to the candidate's background.\n\n"
+            f"Candidate Resume:\n{resume_str}"
+        )
+        user_prompt = (
+            f"Base question: {base_question}\n"
+            f"Category: {category}\n\n"
+            "Generate ONE specific, natural interview question personalised to this candidate's resume.\n"
+            "- Reference their background where relevant (e.g. 'You mentioned X…')\n"
+            "- No preamble, just the question\n"
+            "- 15–30 words, end with ?\n\n"
+            "Question:"
+        )
+
+        question_text = self._call_llm_for_question(system_prompt, user_prompt)
+
+        if not question_text or len(question_text.split()) > 35:
+            return self._maybe_rephrase(base_question)
+
+        return question_text
+
+    def _followup_system_prompt(self, angle: str, resume_json: Optional[Dict]) -> str:
+        resume_context = ""
+        if resume_json:
+            resume_str = json.dumps(resume_json)[:500] if isinstance(resume_json, dict) else str(resume_json)[:500]
+            resume_context = f"\nCandidate Resume:\n{resume_str}\n"
+
+        goal = _ANGLE_GOAL.get(angle, "")
+        return (
+            f"You are a senior technical interviewer.{resume_context}\n"
+            "Your follow-up questions must be:\n"
+            "- Directly relevant to the candidate's previous answer\n"
+            "- Probing and insightful but conversational\n"
+            "- Test depth of understanding\n"
+            f"{f'Goal: {goal}' if goal else ''}"
+        )
+
+    def _followup_user_prompt(
+        self,
+        previous_question: str,
+        previous_answer: str,
+        evaluation_result: Optional[Dict],
+    ) -> str:
+        parts = [
+            f"Previous question: {previous_question}",
+            f"Candidate's answer: {previous_answer}",
         ]
-        
-        prefix = random.choice(prefixes)
-        return f"{prefix}{question}"
+        if evaluation_result:
+            parts.append(
+                f"Evaluation:\n"
+                f"- Decision: {evaluation_result.get('decision', 'unknown')}\n"
+                f"- Score: {evaluation_result.get('score_value', 0.5):.2f}\n"
+                f"- Remarks: {evaluation_result.get('remarks', '')}"
+            )
+        parts.append(
+            "Generate ONE natural follow-up question that probes deeper.\n"
+            "Rules:\n"
+            "1. Directly related to the previous answer\n"
+            "2. Max 25 words\n"
+            "3. Conversational interview style\n"
+            "4. No preamble — just the question\n"
+            "5. End with ?\n\n"
+            "Question:"
+        )
+        return "\n\n".join(parts)
 
+    # ------------------------------------------------------------------
+    # Text cleaning / validation
+    # ------------------------------------------------------------------
 
-# ========== USAGE EXAMPLE ==========
-if __name__ == "__main__":
-    # Mock data for testing
-    mock_dataset = [
-        {
-            "Id": 1,
-            "Question": "What is the difference between compilation and interpretation?",
-            "Answer": "Compilation translates source code into machine code...",
-            "Category": "General Programming",
-            "Difficulty": "medium"
-        },
-        {
-            "Id": 2,
-            "Question": "Explain polymorphism in OOP.",
-            "Answer": "Polymorphism allows objects of different types...",
-            "Category": "Object-Oriented Programming",
-            "Difficulty": "medium"
-        }
-    ]
-    
-    # with open("data/temp/job_description.json") as f:
-    #     job_desc = json.load(f)["job_description"]    
-    with open("data/temp/sample_resume.json") as f:
-        resume = json.load(f)
-    
-    generator = QuestionGenerator(
-        model_type="gemini",
-        candidate_resume=resume,
-        dataset_questions=mock_dataset,
-        difficulty="easy"
-    )
-    
-    # Test new topic question
-    print("=== NEW TOPIC QUESTION ===")
-    q, meta = generator.generate_new_topic_question(
-        topics_covered=["algorithms"],
-        difficulty="medium"
-    )
-    print(f"Question: {q}")
-    print(f"Metadata: {meta}\n")
-    
-    # Test follow-up question
-    print("=== FOLLOW-UP QUESTION ===")
-    followup_q, followup_meta = generator.generate_followup_question(
-        previous_question="What is the difference between compilation and interpretation?",
-        previous_answer="I am not fimiliar with those concepts.",
-        resume_json=resume,
-        evaluation_result={"pass": False, "depth_score": 0.4}
-    )
-    print(f"Follow-up: {followup_q}")
-    print(f"Metadata: {followup_meta}")
+    def _clean_question(self, text: str) -> str:
+        text = re.sub(r"^(Question:|Follow-up:|Q:)\s*", "", text, flags=re.IGNORECASE).strip()
+        # Keep only the first sentence
+        first = re.split(r"[.!?]", text)[0].strip()
+        return first + "?" if first and not first.endswith("?") else first
+
+    def _is_valid_followup(self, question: str, previous_answer: str) -> bool:
+        if not question or len(question) < 10 or not question.endswith("?"):
+            return False
+        if len(question.split()) > 30:
+            return False
+        q_words = set(re.findall(r"\b\w{4,}\b", question.lower()))
+        a_words = set(re.findall(r"\b\w{4,}\b", previous_answer.lower()))
+        common = q_words & a_words
+        return 1 <= len(common) <= 10
