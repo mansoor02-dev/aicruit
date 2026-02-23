@@ -1,43 +1,30 @@
-# ===============================
-# Builder stage
-# ===============================
-FROM python:3.12-slim AS builder
+# Use small base image
+FROM python:3.11-slim
 
-ENV DEBIAN_FRONTEND=noninteractive \
-    PIP_NO_CACHE_DIR=1 \
-    PYTHONDONTWRITEBYTECODE=1
+# Prevent Python from writing pyc files
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
-# Install build dependencies needed to build wheels
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        build-essential \
-        gcc \
-        g++ \
-        git \
-        libgomp1 \
-    && rm -rf /var/lib/apt/lists/*
-
+# Set working directory
 WORKDIR /app
 
-# Copy requirements first for better caching
-COPY requirements.txt ./
+# Install system dependencies only if needed
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install Python packages with special handling for llama-cpp-python
-# Set hardware acceleration flags for CPU
-ENV CMAKE_ARGS="-DLLAMA_BLAS=ON -DLLAMA_BLAS_VENDOR=OpenBLAS -DLLAMA_AVX2=ON -DLLAMA_FMA=ON -DLLAMA_F16C=ON"
-ENV FORCE_CMAKE=1
+# Copy only requirements first (for caching)
+COPY requirements.txt .
 
-# Install requirements, forcing source build for llama-cpp-python to apply optimizations
-RUN pip install --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt --no-binary=llama-cpp-python
+# Install Python dependencies
+RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
 
-# Create logs directory and set permissions
-RUN mkdir -p logs && chown -R appuser:appuser /app
+# Expose port (change if your app uses different port)
+EXPOSE 8010
 
-EXPOSE 8000
-
-# Run the API
-CMD ["uvicorn", "app.api:app", "--host", "0.0.0.0", "--port", "8000"]
+# Start command (modify if different)
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8010", "--app-dir", "app"]
