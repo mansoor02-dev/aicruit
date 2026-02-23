@@ -1,4 +1,3 @@
-version: '3.9'
 
 services:
   postgres:
@@ -139,15 +138,23 @@ services:
       context: ../../services/question-generation
     container_name: aicruit_question_generation
     ports:
-      - "8008:8000"
+      - "8010:8010"
+    env_file:
+      - ../../services/question-generation/.env
     environment:
-      DATABASE_URL: postgresql+asyncpg://admin:admin123@postgres:5432/aicruit
-    depends_on:
-      - postgres
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
     volumes:
-      - ../../services/question-generation/models:/app/models
+      - ../../services/question-generation/cache:/app/cache
       - ../../services/question-generation/data:/app/data
       - ../../services/question-generation/logs:/app/logs
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8010/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
 volumes:
   pgdata:
