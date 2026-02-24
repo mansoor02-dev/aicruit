@@ -6,12 +6,13 @@ from pathlib import Path
 import faiss
 import numpy as np
 import pandas as pd
-from sentence_transformers import SentenceTransformer
+
 
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
 
 from pipelines.answer_evaluator import AnswerEvaluator
+from pipelines.llm_loader import get_embedder
 from pipelines.conversation_manager import ConversationManager
 from pipelines.flow_controller import FlowController
 from pipelines.question_generator import QuestionGenerator
@@ -68,7 +69,7 @@ def load_questions(csv_path: Path) -> list:
     return questions
 
 
-def build_or_load_index(questions: list, embedder: SentenceTransformer) -> tuple:
+def build_or_load_index(questions: list, embedder: get_embedder(Config.EMBED_MODEL)) -> tuple:
     if Config.INDEX_PATH.exists() and Config.PASSAGES_PKL.exists():
         try:
             index = faiss.read_index(str(Config.INDEX_PATH))
@@ -119,8 +120,7 @@ def run_interview() -> None:
     questions = load_questions(Config.CSV_PATH)
 
     print(f"\nLoading embedding model: {Config.EMBED_MODEL}")
-    embedder = SentenceTransformer(Config.EMBED_MODEL, device="cpu")
-    embedder.max_seq_length = 128
+    embedder = get_embedder(Config.EMBED_MODEL)
 
     build_or_load_index(questions, embedder)   # warm the cache
 

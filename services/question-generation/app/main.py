@@ -10,13 +10,13 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from sentence_transformers import SentenceTransformer
+
 
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
 
 from pipelines.answer_evaluator import AnswerEvaluator
-from pipelines.llm_loader import LLMLoader
+from pipelines.llm_loader import LLMLoader, get_embedder
 from pipelines.orchestrator import InterviewOrchestrator
 from pipelines.question_generator import QuestionGenerator
 
@@ -39,8 +39,8 @@ async def lifespan(app: FastAPI):
     llm = LLMLoader(model_type="openrouter").get_llm()
     logger.info("LLM loaded")
 
-    embedder = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
-    logger.info("Embedder loaded")
+    embedder = get_embedder()
+    logger.info("Embedder loaded (cached)")
 
     dataset_path = Path("data/software_questions.csv")
     with open(dataset_path, newline="", encoding="latin1") as f:
@@ -72,9 +72,8 @@ class QA(BaseModel):
     Q: str
     A: str
 
-
 class QuestionRequest(BaseModel):
-    resume_json: Optional[Dict[str, Any]] = None
+    resume_json: Optional[Dict[str | None, Any]] = None
     previous_qa: Optional[List[QA]] = []
     difficulty: str = "medium"
 

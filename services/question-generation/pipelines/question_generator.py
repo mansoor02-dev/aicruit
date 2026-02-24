@@ -187,19 +187,25 @@ class QuestionGenerator:
         self, base_question: str, category: str, resume_json: Dict
     ) -> str:
         """Personalise a dataset question to the candidate's resume using the LLM."""
-        resume_str = json.dumps(resume_json)[:300] if isinstance(resume_json, dict) else str(resume_json)[:300]
+        resume_snippet = self._build_resume_snippet(resume_json)
+
+        if not resume_snippet:
+            return self._maybe_rephrase(base_question)
 
         system_prompt = (
-            f"You are a senior technical interviewer. Tailor questions to the candidate's background.\n\n"
-            f"Candidate Resume:\n{resume_str}"
+            "You are a senior technical interviewer. Your job is to ask questions\n"
+            "that are SPECIFICALLY tied to the candidate's own projects, skills, or\n"
+            "work experience — not generic textbook questions.\n\n"
+            f"Candidate Background:\n{resume_snippet}"
         )
         user_prompt = (
-            f"Base question: {base_question}\n"
+            f"Base topic / question: {base_question}\n"
             f"Category: {category}\n\n"
-            "Generate ONE specific, natural interview question personalised to this candidate's resume.\n"
-            "- Reference their background where relevant (e.g. 'You mentioned X…')\n"
-            "- No preamble, just the question\n"
-            "- 15–30 words, end with ?\n\n"
+            "Generate ONE interview question that:\n"
+            "- Directly references a specific project, skill, or experience from the candidate's resume\n"
+            "- Asks HOW or WHERE they applied the concept, e.g. 'In your [project], how did you handle…'\n"
+            "- Is natural and conversational, 15–30 words\n"
+            "- No preamble — just the question, ending with ?\n\n"
             "Question:"
         )
 
@@ -210,11 +216,45 @@ class QuestionGenerator:
 
         return question_text
 
+    @staticmethod
+    def _build_resume_snippet(resume_json: Dict) -> str:
+        """Extract skills, projects, and experience into a concise string for prompts."""
+        parts: List[str] = []
+
+        # Skills (try both cases)
+        skills = resume_json.get("Skills") or resume_json.get("skills") or []
+        if skills:
+            parts.append(f"Skills: {', '.join(skills)}")
+
+        # Projects
+        projects = resume_json.get("projects") or resume_json.get("Projects") or []
+        for proj in projects[:3]:
+            title = proj.get("title", "")
+            desc = proj.get("description", "")
+            if isinstance(desc, list):
+                desc = "; ".join(desc)
+            if title:
+                parts.append(f"Project – {title}: {desc[:200]}")
+
+        # Experience
+        experience = resume_json.get("experience") or resume_json.get("Experience") or []
+        for exp in experience[:3]:
+            role = exp.get("role") or exp.get("title", "")
+            company = exp.get("company", "")
+            desc = exp.get("description", "")
+            if isinstance(desc, list):
+                desc = "; ".join(desc)
+            if role:
+                parts.append(f"Experience – {role} at {company}: {desc[:200]}")
+
+        return "\n".join(parts)
+
     def _followup_system_prompt(self, angle: str, resume_json: Optional[Dict]) -> str:
         resume_context = ""
         if resume_json:
-            resume_str = json.dumps(resume_json)[:500] if isinstance(resume_json, dict) else str(resume_json)[:500]
-            resume_context = f"\nCandidate Resume:\n{resume_str}\n"
+            snippet = self._build_resume_snippet(resume_json)
+            if snippet:
+                resume_context = f"\nCandidate Background:\n{snippet}\n"
 
         goal = _ANGLE_GOAL.get(angle, "")
         return (
