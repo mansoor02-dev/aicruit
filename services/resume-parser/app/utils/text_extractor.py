@@ -5,12 +5,7 @@ from pdf2image import convert_from_path
 import pytesseract
 import docx
 
-<<<<<<< HEAD:services/resume_parser/pipelines/extract_text.py
-def extract_text_pdf(pdf_path: str) -> str:
-=======
-
 def extract_text_from_pdf(pdf_path: str) -> Optional[str]:
->>>>>>> 8d39c8e743a34e517f851bdcf472e3205b61209f:services/resume-parser/app/utils/text_extractor.py
     """Extract text from PDF using PyMuPDF"""
     try:
         doc = fitz.open(pdf_path)
@@ -51,10 +46,6 @@ def extract_text_docx(docx_path: str) -> Optional[str]:
         print(f"❌ Error reading DOCX: {e}")
         return None
 
-<<<<<<< HEAD:services/resume_parser/pipelines/extract_text.py
-        
-=======
-
 def extract_from_file(file_path: str) -> Optional[str]:
     """
     Extract text from PDF or DOCX file
@@ -85,5 +76,3 @@ def extract_from_file(file_path: str) -> Optional[str]:
     except Exception as e:
         print(f"❌ Error reading file: {e}")
         return None
-
->>>>>>> 8d39c8e743a34e517f851bdcf472e3205b61209f:services/resume-parser/app/utils/text_extractor.py

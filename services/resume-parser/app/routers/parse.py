@@ -24,7 +24,7 @@ async def parse_resume(request: ParseResumeRequest):
     """
     try:
         # Fetch resume from database
-        session = get_db_session()
+        session = next(get_db_session())
         try:
             resume_row = session.query(Resume).filter(Resume.id == request.resume_id).first()
             if not resume_row:
@@ -33,42 +33,42 @@ async def parse_resume(request: ParseResumeRequest):
                     detail=f"Resume with ID {request.resume_id} not found"
                 )
             
-            # Parse stored JSON
-            print(f"Processing resume from database: {request.resume_id}")
-            resume_data = json.loads(resume_row.parsed_json)
-            
-            # Extract skills from resume data
-            skills = resume_data.get('skills', [])
-            
-            # Prepare parsed skills data for storage
-            parsed_skills = {
-                "skills": skills
-            }
-            
-            # Prepare parsed files directory (configurable)
-            parsed_dir = os.getenv("PARSED_DIR",
-                           os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'parsed')))
-            os.makedirs(parsed_dir, exist_ok=True)
-            
-            # Save parsed skills JSON to file
-            try:
-                parsed_filename = f"resume_{request.resume_id}_skills.json"
-                parsed_path = os.path.join(parsed_dir, parsed_filename)
-                with open(parsed_path, "w", encoding="utf-8") as pf:
-                    json.dump(parsed_skills, pf, indent=2)
-                print(f"✅ Saved parsed skills to: {parsed_filename}")
-            except Exception as file_err:
-                print(f"Warning: failed to write parsed skills file for resume {request.resume_id}: {file_err}")
-            
-            # Update resume record with parsed skills
-            try:
-                resume_row.parsed_skills = json.dumps(parsed_skills)
-                session.commit()
-                session.refresh(resume_row)
-                print(f"✅ Updated resume record with parsed skills")
-            except Exception as update_err:
-                session.rollback()
-                raise HTTPException(status_code=500, detail=f"Failed to update resume: {str(update_err)}")
+            # If already parsed, return it
+            if resume_row.parsed_skills:
+                print(f"Resume {request.resume_id} already parsed")
+                skills_data = resume_row.parsed_skills
+                if isinstance(skills_data, dict):
+                    skills = skills_data.get('skills', [])
+                elif isinstance(skills_data, list):
+                    skills = skills_data
+                else:
+                    skills = []
+            else:
+                # Need to parse
+                from ..utils.pipeline import process_resume_from_url
+                print(f"Processing resume from database: {request.resume_id}")
+                
+                file_url = resume_row.file_url
+                # Convert localhost URL to docker internal service if applicable
+                if "localhost:8005" in file_url or "127.0.0.1:8005" in file_url:
+                    file_url = file_url.replace("localhost:8005", "aicruit_file_service:8005").replace("127.0.0.1:8005", "aicruit_file_service:8005")
+                elif file_url.startswith("/"):
+                    file_url = f"http://aicruit_file_service:8005{file_url}"
+                
+                # Extract using Pipeline
+                structured_resume = process_resume_from_url(file_url)
+                skills = structured_resume.skills
+                
+                # Update resume record with full parsed text and skills
+                try:
+                    resume_row.parsed_skills = {"skills": skills}
+                    resume_row.parsed_text = structured_resume.model_dump_json()
+                    session.commit()
+                    session.refresh(resume_row)
+                    print(f"✅ Updated resume record with parsed data")
+                except Exception as update_err:
+                    session.rollback()
+                    raise HTTPException(status_code=500, detail=f"Failed to update resume: {str(update_err)}")
             
             return ParseResumeResponse(
                 id=request.resume_id,
@@ -78,7 +78,12 @@ async def parse_resume(request: ParseResumeRequest):
         except HTTPException:
             raise
         except Exception as db_error:
-            session.rollback()
+            import traceback
+            traceback.print_exc()
+            try:
+                session.rollback()
+            except Exception:
+                pass
             raise HTTPException(status_code=500, detail=f"Database error: {str(db_error)}")
         finally:
             session.close()
