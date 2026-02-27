@@ -155,6 +155,28 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+  text-to-speech:
+    build:
+      context: ../../services/text-to-speech
+    container_name: aicruit_text_to_speech
+    ports:
+      - "8011:8011"
+    env_file:
+      - ../../services/text-to-speech/.env
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ../../services/text-to-speech/cache:/app/cache
+      - ../../services/text-to-speech/logs:/app/logs
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8011/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
 
 volumes:
   pgdata:
