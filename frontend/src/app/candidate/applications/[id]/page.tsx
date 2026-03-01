@@ -89,11 +89,8 @@ export default function ApplicationDetails() {
   }, [application]);
 
   const handleStartInterview = () => {
-    toast({
-      title: "Interview Selected",
-      description: "Starting interview interface...",
-    });
-    // Logic to be added later
+    // Open interview page in a new tab
+    window.open(`/candidate/interview/${application?.application_id}`, '_blank');
   };
 
   const getStatusBadge = (status: string) => {
@@ -193,11 +190,9 @@ export default function ApplicationDetails() {
                 <Button 
                   size="lg" 
                   onClick={handleStartInterview}
-                  disabled={!canStartInterview}
-                  className={!canStartInterview ? "opacity-50 cursor-not-allowed" : ""}
                 >
                   <Video className="w-4 h-4 mr-2" />
-                  Start Interview
+                  Join Interview
                 </Button>
               </div>
             </CardContent>

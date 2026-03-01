@@ -15,7 +15,7 @@ class InterviewModel(Base):
 
     # --- Interview Details ---
     scheduled_at = Column(DateTime, nullable=False)
-    status = Column(String(20), default="scheduled")  # scheduled, completed, cancelled, expired
+    status = Column(String(20), default="scheduled")  # scheduled, in_progress, completed, cancelled, expired
     cheating_risk_score = Column(Integer, default=0)
 
     created_at = Column(DateTime, default=func.now())

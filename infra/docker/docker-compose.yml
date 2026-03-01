@@ -102,6 +102,9 @@ services:
     environment:
       RESUME_PARSER_URL: http://aicruit_resume-parser:8006
       FILE_SERVICE_URL: http://aicruit_file_service:8005
+      QUESTION_GEN_URL: http://aicruit_question_generation:8010
+      TTS_URL: http://aicruit_text_to_speech:8011
+      TRANSCRIBE_URL: http://aicruit_audio_transcribe:8007
       DB_NAME: aicruit
       DB_USER: admin
       DB_PASS: admin123
@@ -115,6 +118,9 @@ services:
       - postgres
       - resume-parser
       - file-service
+      - question-generation
+      - text-to-speech
+      - audio-transcribe
 
   audio-transcribe:
     build:
