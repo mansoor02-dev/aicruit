@@ -67,6 +67,7 @@ class QuestionGenerator:
         difficulty: Optional[str] = None,
         resume_json: Optional[Dict] = None,
         category: Optional[str] = None,
+        category: Optional[str] = None,
     ) -> Tuple[str, Dict]:
         """
         Pick a question from the dataset (filtered by difficulty and optional
@@ -82,6 +83,7 @@ class QuestionGenerator:
         if resume_json:
             question_text = self._generate_contextual_question(
                 base_question=base_q,
+                category=category or selected.get("Category", "Software Engineering"),
                 category=category or selected.get("Category", "Software Engineering"),
                 resume_json=resume_json,
                 difficulty=difficulty,

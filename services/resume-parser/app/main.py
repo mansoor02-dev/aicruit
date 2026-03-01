@@ -1,30 +1,27 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from app.routers import parse
-import os
+import json
+import sys
+from pathlib import Path
+from ingestion import ingest
+from cleaner import clean_text
+from inference import run_inference
+from validator import validate
 
-app = FastAPI(title="Resume Parser Service", version="1.0.0")
-
-# Configure CORS so the frontend can call this service
-FRONTEND_ORIGINS = os.getenv("FRONTEND_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://localhost:8000").split(",")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=FRONTEND_ORIGINS if FRONTEND_ORIGINS != [''] else ["*"],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
-)
-
-app.include_router(parse.router)
+import time
 
 
-@app.get("/")
-async def root():
-    return {"message": "Resume Parser Service", "status": "running"}
+def parse_resume(file_path: str) -> dict:
+    raw_text = ingest(file_path)
+    clean = clean_text(raw_text)
+    raw_json = run_inference(clean)
+    result = validate(raw_json)
+    return result, clean, raw_json
 
 
-@app.get("/health")
-async def health():
-    return {"status": "healthy"}
-
+if __name__ == "__main__":
+    # file_path = sys.argv[1] if len(sys.argv) > 1 else "data/Mansoor_Abid_CV.pdf"
+    file_path = "data/" + input("Enter file name: ")
+    start_time = time.time()
+    result, clean, raw_json = parse_resume(file_path)
+    end_time = time.time()
+    print(f"Processing took {end_time - start_time:.2f} seconds")
+    print(json.dumps(result, indent=2))

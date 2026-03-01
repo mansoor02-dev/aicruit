@@ -75,7 +75,7 @@ services:
     ports:
       - "8006:8006"
     env_file:
-      - ../../services/resume-parser/app/.env
+      - ../../services/resume-parser/.env
     environment:
       DB_NAME: aicruit
       DB_USER: admin
