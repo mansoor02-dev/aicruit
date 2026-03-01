@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+psycopg2-binary
+python-dotenv
+pydantic
+python-multipart
+requests
+PyMuPDF
+pdf2image
+pytesseract
+python-docx
+google-generativeai
+Pillow
+SQLAlchemy
+

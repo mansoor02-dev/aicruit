@@ -54,6 +54,7 @@ class QuestionGenerator:
         topics_covered: Optional[List[str]] = None,
         difficulty: Optional[str] = None,
         resume_json: Optional[Dict] = None,
+        category: Optional[str] = None,
     ) -> Tuple[str, Dict]:
         """
         Pick a question from the dataset (filtered by difficulty, avoiding
@@ -69,7 +70,7 @@ class QuestionGenerator:
         if resume_json:
             question_text = self._generate_contextual_question(
                 base_question=base_q,
-                category=selected.get("Category", "Software Engineering"),
+                category=category or selected.get("Category", "Software Engineering"),
                 resume_json=resume_json,
             )
             source = "dataset_inspired"
@@ -174,8 +175,8 @@ class QuestionGenerator:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
-                temperature=0.6,
-                max_tokens=150,
+                temperature=0.4,
+                max_tokens=80,
             )
             raw = response["choices"][0]["message"]["content"].strip()
             return self._clean_question(raw)
@@ -203,8 +204,8 @@ class QuestionGenerator:
             f"Category: {category}\n\n"
             "Generate ONE interview question that:\n"
             "- Directly references a specific project, skill, or experience from the candidate's resume\n"
-            "- Asks HOW or WHERE they applied the concept, e.g. 'In your [project], how did you handle…'\n"
-            "- Is natural and conversational, 15–30 words\n"
+            "- Asks HOW or WHERE they applied the concept, e.g. 'In your [project_name], how did you handle…'\n"
+            "- Is natural and conversational, 10–20 words\n"
             "- No preamble — just the question, ending with ?\n\n"
             "Question:"
         )

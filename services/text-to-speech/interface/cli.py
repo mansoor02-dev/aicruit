@@ -1,11 +1,3 @@
-"""
-Interface – CLI
-
-Usage:
-  python main.py --text "Hello world" --provider local
-  python main.py --text "Hello world" --provider api --output out.wav
-  python main.py --file input.txt --provider auto --format mp3
-"""
 import argparse
 import logging
 import sys

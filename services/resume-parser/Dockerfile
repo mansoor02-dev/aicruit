@@ -1,18 +1,35 @@
-FROM python:3.12-slim
+# ── Stage 1: Builder ──────────────────────────────────────────────
+FROM python:3.11-slim AS builder
 
-# Install system dependencies for PDF processing and OCR
-RUN apt-get update && apt-get install -y \
-    poppler-utils \
-    tesseract-ocr \
-    libtesseract-dev \
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc g++ cmake make \
     && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --upgrade pip && \
+    pip install --prefix=/install --no-cache-dir -r requirements.txt
+
+
+# ── Stage 2: Runtime ──────────────────────────────────────────────
+FROM python:3.11-slim AS runtime
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tesseract-ocr \
+    libglib2.0-0 libgl1 \
+    && rm -rf /var/lib/apt/lists/*
 
-COPY . .
+COPY --from=builder /install /usr/local
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8006"]
+COPY app/ .
 
+ENV GEMINI_API_KEY=""
+ENV MODEL_PATH="/app/models/qwen2.5-1.5b-instruct-q4_k_m.gguf"
+ENV INFERENCE_BACKEND="gemini"
+
+EXPOSE 8006
+
+CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8006"]
