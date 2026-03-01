@@ -76,6 +76,7 @@ class QuestionRequest(BaseModel):
     resume_json: Optional[Dict[str | None, Any]] = None
     previous_qa: Optional[List[QA]] = []
     difficulty: str = "medium"
+    category: Optional[str] = None
 
 
 # ------------------------------------------------------------------
@@ -108,13 +109,14 @@ async def get_next_question(req: QuestionRequest):
 
         logger.info(
             f"Generating question: history_length={len(previous_qa_list or [])}, "
-            f"difficulty={req.difficulty}"
+            f"difficulty={req.difficulty}, category={req.category}"
         )
 
         question, metadata = orchestrator.generate_next_question(
             resume_json=req.resume_json or {},
             previous_qa_list=previous_qa_list,
             difficulty=req.difficulty,
+            category=req.category,
         )
 
         logger.info(

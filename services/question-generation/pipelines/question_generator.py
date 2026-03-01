@@ -30,6 +30,18 @@ _FALLBACK_TEMPLATES: Dict[str, List[str]] = {
 
 _CONVERSATIONAL_PREFIXES = ["", "Let me ask you this: ", "Here's a question: ", "I'd like to know: ", "Quick question: "]
 
+_DIFFICULTY_GUIDANCE = {
+    "easy":   "easy difficulty — single-concept, simple vocabulary, max 15 words, no compound parts",
+    "medium": "medium difficulty — requires brief explanation, max 20 words, 1-2 parts at most",
+    "hard":   "hard difficulty — probes deep understanding or trade-offs, max 25 words",
+}
+
+_DIFFICULTY_WORD_LIMIT = {
+    "easy":   10,
+    "medium": 15,
+    "hard":   20,
+}
+
 
 class QuestionGenerator:
     """Generates interview questions — new topics and contextual follow-ups."""
@@ -54,23 +66,25 @@ class QuestionGenerator:
         topics_covered: Optional[List[str]] = None,
         difficulty: Optional[str] = None,
         resume_json: Optional[Dict] = None,
+        category: Optional[str] = None,
     ) -> Tuple[str, Dict]:
         """
-        Pick a question from the dataset (filtered by difficulty, avoiding
-        already-covered topics), optionally personalising it via LLM when a
-        resume is provided.
+        Pick a question from the dataset (filtered by difficulty and optional
+        category, avoiding already-covered topics), optionally personalising
+        it via LLM when a resume is provided.
         """
         topics_covered = topics_covered or []
         difficulty = (difficulty or self.difficulty).lower()
 
-        selected = self._pick_question(topics_covered, difficulty)
+        selected = self._pick_question(topics_covered, difficulty, category=category)
 
         base_q = selected.get("Question") or selected.get("question", "")
         if resume_json:
             question_text = self._generate_contextual_question(
                 base_question=base_q,
-                category=selected.get("Category", "Software Engineering"),
+                category=category or selected.get("Category", "Software Engineering"),
                 resume_json=resume_json,
+                difficulty=difficulty,
             )
             source = "dataset_inspired"
         else:
@@ -79,8 +93,9 @@ class QuestionGenerator:
 
         metadata = {
             "source": source,
+            "scenario": "new_question",
             "question_id": selected.get("Id"),
-            "category": selected.get("Category", "Unknown"),
+            "category": category or selected.get("Category", "Unknown"),
             "difficulty": selected.get("Difficulty", "medium"),
             "reference_answer": selected.get("Answer", ""),
             "is_followup": False,
@@ -93,16 +108,18 @@ class QuestionGenerator:
         previous_answer: str,
         evaluation_result: Optional[Dict] = None,
         resume_json: Optional[Dict] = None,
+        difficulty: Optional[str] = None,
     ) -> Tuple[str, Dict]:
         """
         Generate a contextual follow-up question using the LLM, with a
         template-based fallback.
         """
+        difficulty = (difficulty or self.difficulty).lower()
         decision = (evaluation_result or {}).get("decision", "same_topic").lower()
         angle = _FOLLOWUP_ANGLE_MAP.get(decision, "elaboration")
 
-        system_prompt = self._followup_system_prompt(angle, resume_json)
-        user_prompt = self._followup_user_prompt(previous_question, previous_answer, evaluation_result)
+        system_prompt = self._followup_system_prompt(angle, resume_json, difficulty=difficulty)
+        user_prompt = self._followup_user_prompt(previous_question, previous_answer, evaluation_result, difficulty=difficulty)
 
         question_text = self._call_llm_for_question(system_prompt, user_prompt)
 
@@ -112,6 +129,7 @@ class QuestionGenerator:
 
         metadata = {
             "source": "llm_generated",
+            "scenario": "question_with_same_category",
             "is_followup": True,
             "followup_angle": angle,
             "based_on_question": previous_question,
@@ -119,30 +137,105 @@ class QuestionGenerator:
         }
         return question_text, metadata
 
+    def generate_introduction_question(
+        self,
+        resume_json: Optional[Dict] = None,
+    ) -> Tuple[str, Dict]:
+        """
+        Generate a warm, personalised opening question for the very start of
+        the interview (no history, no category).
+        """
+        name = ""
+        if resume_json and isinstance(resume_json, dict):
+            name = (
+                resume_json.get("name")
+                or resume_json.get("Name")
+                or resume_json.get("personal_info", {}).get("name", "")
+            )
+
+        if name:
+            question_text = f"Hi {name}, welcome! Could you please introduce yourself and walk me through your technical background?"
+        else:
+            question_text = "Welcome! Could you please introduce yourself and walk me through your technical background?"
+
+        metadata = {
+            "source": "introduction",
+            "scenario": "1st_question",
+            "question_id": None,
+            "category": "Introduction",
+            "difficulty": "easy",
+            "reference_answer": "",
+            "is_followup": False,
+        }
+        return question_text, metadata
+
+    def generate_category_opener_question(
+        self,
+        category: str
+    ) -> Tuple[str, Dict]:
+        """
+        Generate the FIRST question for a category — always a general, easy
+        dataset question with no resume personalisation.  This warms the
+        candidate up on the topic before contextual / resume-linked questions
+        are introduced in the follow-on turns.
+        """
+        # Always use easy difficulty for the opener regardless of session difficulty
+        selected = self._pick_question([], "easy", category=category)
+
+        question_text = self._maybe_rephrase(
+            selected.get("Question") or selected.get("question", "")
+        )
+
+        metadata = {
+            "source": "dataset",
+            "scenario": "new_question",
+            "question_id": selected.get("Id"),
+            "category": selected.get("Category", category),
+            "difficulty": "easy",
+            "reference_answer": selected.get("Answer", ""),
+            "is_followup": False,
+            "is_category_opener": True,
+        }
+        return question_text, metadata
+
     # ------------------------------------------------------------------
     # Dataset helpers
     # ------------------------------------------------------------------
 
-    def _pick_question(self, topics_covered: List[str], difficulty: str) -> Dict:
+    def _pick_question(
+        self,
+        topics_covered: List[str],
+        difficulty: str,
+        category: Optional[str] = None,
+    ) -> Dict:
         """Select a question from the dataset, progressively relaxing constraints."""
+        # Apply category filter as the base pool when provided
+        if category:
+            base_dataset = [
+                q for q in self.dataset
+                if q.get("Category", "").lower() == category.lower()
+            ] or self.dataset  # fall back to full dataset if category not found
+        else:
+            base_dataset = self.dataset
+
         # Preferred: correct difficulty, not yet used
         pool = [
-            q for q in self.dataset
+            q for q in base_dataset
             if q.get("Difficulty", "").lower() == difficulty
             and q.get("Id") not in self.used_question_ids
         ]
 
         # Relax used-question constraint if pool too small
         if len(pool) < 3:
-            pool = [q for q in self.dataset if q.get("Difficulty", "").lower() == difficulty]
+            pool = [q for q in base_dataset if q.get("Difficulty", "").lower() == difficulty]
 
         # Relax difficulty if still empty
         if not pool:
-            pool = [q for q in self.dataset if q.get("Id") not in self.used_question_ids]
+            pool = [q for q in base_dataset if q.get("Id") not in self.used_question_ids]
 
-        # Last resort: entire dataset
+        # Last resort: base dataset (category-filtered or full)
         if not pool:
-            pool = self.dataset
+            pool = base_dataset
 
         # Prefer topics not in the last 3 covered
         recent_topics = set(topics_covered[-3:])
@@ -174,17 +267,17 @@ class QuestionGenerator:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
-                temperature=0.6,
+                temperature=0.4,
                 max_tokens=150,
             )
             raw = response["choices"][0]["message"]["content"].strip()
             return self._clean_question(raw)
         except Exception as e:
-            print(f"⚠️  LLM question generation failed: {e}")
+            print(f" LLM question generation failed: {e}")
             return ""
 
     def _generate_contextual_question(
-        self, base_question: str, category: str, resume_json: Dict
+        self, base_question: str, category: str, resume_json: Dict, difficulty: str = "medium"
     ) -> str:
         """Personalise a dataset question to the candidate's resume using the LLM."""
         resume_snippet = self._build_resume_snippet(resume_json)
@@ -192,26 +285,32 @@ class QuestionGenerator:
         if not resume_snippet:
             return self._maybe_rephrase(base_question)
 
+        difficulty_guide = _DIFFICULTY_GUIDANCE.get(difficulty, _DIFFICULTY_GUIDANCE["medium"])
+        word_limit = _DIFFICULTY_WORD_LIMIT.get(difficulty, 20)
+
         system_prompt = (
-            "You are a senior technical interviewer. Your job is to ask questions\n"
-            "that are SPECIFICALLY tied to the candidate's own projects, skills, or\n"
-            "work experience — not generic textbook questions.\n\n"
+            "You are a senior technical interviewer.\n"
+            f"Difficulty level: {difficulty_guide}\n"
+            "Your job is to ask questions that are SPECIFICALLY tied to the candidate's\n"
+            "own projects, skills, or work experience — not generic textbook questions.\n\n"
             f"Candidate Background:\n{resume_snippet}"
         )
         user_prompt = (
             f"Base topic / question: {base_question}\n"
-            f"Category: {category}\n\n"
+            f"Category: {category}\n"
+            f"Difficulty: {difficulty}\n\n"
             "Generate ONE interview question that:\n"
             "- Directly references a specific project, skill, or experience from the candidate's resume\n"
             "- Asks HOW or WHERE they applied the concept, e.g. 'In your [project], how did you handle…'\n"
-            "- Is natural and conversational, 15–30 words\n"
+            f"- Is natural and conversational, strictly under {word_limit} words\n"
+            "- Matches the difficulty level above exactly — do NOT make it harder\n"
             "- No preamble — just the question, ending with ?\n\n"
             "Question:"
         )
 
         question_text = self._call_llm_for_question(system_prompt, user_prompt)
 
-        if not question_text or len(question_text.split()) > 35:
+        if not question_text or len(question_text.split()) > word_limit + 5:
             return self._maybe_rephrase(base_question)
 
         return question_text
@@ -220,6 +319,11 @@ class QuestionGenerator:
     def _build_resume_snippet(resume_json: Dict) -> str:
         """Extract skills, projects, and experience into a concise string for prompts."""
         parts: List[str] = []
+
+        # Name
+        name = resume_json.get("name") or resume_json.get("Name", "") or resume_json.get("personal_info", {}).get("name", "")
+        if name:
+            parts.append(f"Name: {name}")
 
         # Skills (try both cases)
         skills = resume_json.get("Skills") or resume_json.get("skills") or []
@@ -249,7 +353,9 @@ class QuestionGenerator:
 
         return "\n".join(parts)
 
-    def _followup_system_prompt(self, angle: str, resume_json: Optional[Dict]) -> str:
+    def _followup_system_prompt(
+        self, angle: str, resume_json: Optional[Dict], difficulty: str = "medium"
+    ) -> str:
         resume_context = ""
         if resume_json:
             snippet = self._build_resume_snippet(resume_json)
@@ -257,12 +363,14 @@ class QuestionGenerator:
                 resume_context = f"\nCandidate Background:\n{snippet}\n"
 
         goal = _ANGLE_GOAL.get(angle, "")
+        difficulty_guide = _DIFFICULTY_GUIDANCE.get(difficulty, _DIFFICULTY_GUIDANCE["medium"])
         return (
             f"You are a senior technical interviewer.{resume_context}\n"
+            f"Difficulty level for your question: {difficulty_guide}\n"
             "Your follow-up questions must be:\n"
             "- Directly relevant to the candidate's previous answer\n"
-            "- Probing and insightful but conversational\n"
-            "- Test depth of understanding\n"
+            "- Conversational and appropriately scoped to the difficulty level\n"
+            "- Do NOT exceed the word limit implied by the difficulty level\n"
             f"{f'Goal: {goal}' if goal else ''}"
         )
 
@@ -271,7 +379,9 @@ class QuestionGenerator:
         previous_question: str,
         previous_answer: str,
         evaluation_result: Optional[Dict],
+        difficulty: str = "medium",
     ) -> str:
+        word_limit = _DIFFICULTY_WORD_LIMIT.get(difficulty, 20)
         parts = [
             f"Previous question: {previous_question}",
             f"Candidate's answer: {previous_answer}",
@@ -287,7 +397,7 @@ class QuestionGenerator:
             "Generate ONE natural follow-up question that probes deeper.\n"
             "Rules:\n"
             "1. Directly related to the previous answer\n"
-            "2. Max 25 words\n"
+            f"2. Max {word_limit} words — strictly enforce this\n"
             "3. Conversational interview style\n"
             "4. No preamble — just the question\n"
             "5. End with ?\n\n"
