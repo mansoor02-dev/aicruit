@@ -1,0 +1,23 @@
+
+# ── API provider ──────────────────────────────────────────────────
+gtts              # Google Translate TTS (free, no key)
+pydub            # MP3→WAV conversion for gTTS output
+# ffmpeg must be installed on the OS: apt install ffmpeg
+
+# ── Local provider (choose one or both) ──────────────────────────
+# Option A – Piper TTS (recommended: ONNX, fast on CPU, natural voices)
+piper-tts         # pip install piper-tts
+# onnxruntime>=1.17.0    # pulled in automatically by piper-tts
+
+# Option B – pyttsx3 (system TTS, zero downloads, fallback)
+pyttsx3            # pip install pyttsx3
+# Linux: also run: apt install espeak-ng
+
+# ── REST API (optional) ───────────────────────────────────────────
+# fastapi>=0.110.0
+# uvicorn[standard]>=0.29.0
+
+# ── Testing ──────────────────────────────────────────────────────
+pytest
+pytest-mock
+# httpx>=0.27.0            # FastAPI test client

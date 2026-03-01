@@ -6,7 +6,7 @@ import os
 app = FastAPI(title="Resume Parser Service", version="1.0.0")
 
 # Configure CORS so the frontend can call this service
-FRONTEND_ORIGINS = os.getenv("FRONTEND_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
+FRONTEND_ORIGINS = os.getenv("FRONTEND_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://localhost:8000").split(",")
 
 app.add_middleware(
     CORSMiddleware,

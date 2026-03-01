@@ -17,12 +17,12 @@ def download_file_from_url(url: str, temp_dir: Optional[str] = None) -> str:
     """
     try:
         # Handle relative URLs - if it starts with /static, prepend file service URL
-        if url.startswith('/static/'):
-            file_service_url = os.getenv("FILE_SERVICE_URL", "http://aicruit_file_service:8005")
+        if url.startswith('/uploads/'):
+            file_service_url = os.getenv("FILE_SERVICE_URL", "http://localhost:8005")
             url = f"{file_service_url}{url}"
         elif url.startswith('/'):
             # Other relative URLs
-            file_service_url = os.getenv("FILE_SERVICE_URL", "http://aicruit_file_service:8005")
+            file_service_url = os.getenv("FILE_SERVICE_URL", "http://localhost:8005")
             url = f"{file_service_url}{url}"
         
         # Create temp directory if not provided

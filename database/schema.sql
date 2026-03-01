@@ -120,7 +120,7 @@ CREATE TABLE IF NOT EXISTS interviews (
     
     scheduled_at TIMESTAMP NOT NULL,
     status VARCHAR(20) DEFAULT 'scheduled'
-        CHECK (status IN ('scheduled','completed','cancelled','expired')),
+        CHECK (status IN ('scheduled','in_progress','completed','cancelled','expired')),
     
     cheating_risk_score INT DEFAULT 0,
     created_at TIMESTAMP DEFAULT NOW(),

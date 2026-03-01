@@ -175,11 +175,15 @@ export default function JobDetails() {
     try {
       const [hours, minutes] = interviewTime.split(':').map(Number);
       const scheduledAt = new Date(interviewDate);
-      scheduledAt.setHours(hours, minutes);
+      scheduledAt.setHours(hours, minutes, 0, 0);
+
+      // Manually build ISO string in local time to avoid UTC shift losing the time
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const isoString = `${scheduledAt.getFullYear()}-${pad(scheduledAt.getMonth() + 1)}-${pad(scheduledAt.getDate())}T${pad(hours)}:${pad(minutes)}:00`;
 
       await api.post('/interview/schedule', {
         application_id: selectedApplicant.application_id,
-        scheduled_at: scheduledAt.toISOString(),
+        scheduled_at: isoString,
       });
 
       toast({
@@ -395,7 +399,11 @@ export default function JobDetails() {
                         mode="single"
                         selected={interviewDate}
                         onSelect={setInterviewDate}
-                        disabled={(date) => date < new Date()}
+                        disabled={(date) => {
+                          const today = new Date();
+                          today.setHours(0, 0, 0, 0);
+                          return date < today;
+                        }}
                         initialFocus
                       />
                     </PopoverContent>

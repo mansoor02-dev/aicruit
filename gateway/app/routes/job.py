@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Union
 import httpx
 from uuid import UUID
+import os
 
 from ..core.db import get_db_session
 from ..models.job_model import JobModel
@@ -233,9 +234,10 @@ async def apply_to_job(
         
         # Call parse-resume microservice to parse and extract skills
         try:
+            resume_parser_base_url = os.getenv("RESUME_PARSER_URL", "http://localhost:8006")
             async with httpx.AsyncClient() as client:
                 response = await client.post(
-                    "http://localhost:8006/parse-resume",
+                    f"{resume_parser_base_url}/parse-resume",
                     json={"resume_id": str(new_resume.id)},
                     timeout=30.0
                 )
