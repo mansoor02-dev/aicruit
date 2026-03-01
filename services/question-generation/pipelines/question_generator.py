@@ -67,7 +67,6 @@ class QuestionGenerator:
         difficulty: Optional[str] = None,
         resume_json: Optional[Dict] = None,
         category: Optional[str] = None,
-        category: Optional[str] = None,
     ) -> Tuple[str, Dict]:
         """
         Pick a question from the dataset (filtered by difficulty and optional
