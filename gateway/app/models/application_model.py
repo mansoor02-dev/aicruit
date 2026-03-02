@@ -16,7 +16,7 @@ class ApplicationModel(Base):
     resume_id = Column(UUID(as_uuid=True), ForeignKey("resumes.id"), nullable=True)
     
     # --- Application Details ---
-    status = Column(String(50), default="APPLIED")  # APPLIED, SCREENING, INTERVIEW_SCHEDULED, OFFERED, REJECTED
+    status = Column(String(50), default="APPLIED")  # APPLIED, SCREENING, INTERVIEW_SCHEDULED, INTERVIEW_COMPLETED, OFFERED, REJECTED
     ai_match_score = Column(Integer, default=0)
     
     created_at = Column(DateTime, default=func.now())

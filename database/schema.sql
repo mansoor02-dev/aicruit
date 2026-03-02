@@ -100,7 +100,7 @@ CREATE TABLE IF NOT EXISTS applications (
     
     -- Status Pipeline
     status VARCHAR(50) DEFAULT 'APPLIED' 
-        CHECK (status IN ('APPLIED', 'SCREENING', 'INTERVIEW_SCHEDULED', 'OFFERED', 'REJECTED')),
+        CHECK (status IN ('APPLIED', 'SCREENING', 'INTERVIEW_SCHEDULED', 'INTERVIEW_COMPLETED', 'OFFERED', 'REJECTED')),
     
     -- AI Scoring (Populate this via your /ai/parse endpoint)
     ai_match_score INT DEFAULT 0, 
@@ -135,6 +135,7 @@ CREATE TABLE IF NOT EXISTS interview_questions (
     interview_id UUID REFERENCES interviews(id) ON DELETE CASCADE,
     question_text TEXT NOT NULL,
     question_order INT, -- To keep sequence 1, 2, 3
+    category VARCHAR(100), -- Skill/topic category (NULL = intro)
     created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -154,7 +155,7 @@ CREATE TABLE IF NOT EXISTS interview_responses (
     ai_score INT,
     confidence_score INT,
     communication_score INT,
-    sentiment VARCHAR(20),
+    sentiment TEXT,
     
     created_at TIMESTAMP DEFAULT NOW()
 );

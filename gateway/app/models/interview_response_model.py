@@ -23,7 +23,7 @@ class InterviewResponseModel(Base):
     ai_score = Column(Integer, nullable=True)
     confidence_score = Column(Integer, nullable=True)
     communication_score = Column(Integer, nullable=True)
-    sentiment = Column(String(20), nullable=True)
+    sentiment = Column(Text, nullable=True)
 
     created_at = Column(DateTime, default=func.now())
 

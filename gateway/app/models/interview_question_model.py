@@ -16,8 +16,10 @@ class InterviewQuestionModel(Base):
     # --- Question Details ---
     question_text = Column(Text, nullable=False)
     question_order = Column(Integer)  # Sequence: 1, 2, 3...
+    category = Column(String(100), nullable=True)  # Skill/topic category (null = intro)
 
     created_at = Column(DateTime, default=func.now())
 
     # --- Relationships ---
     interview = relationship("InterviewModel", backref="questions")
+

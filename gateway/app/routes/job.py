@@ -407,3 +407,26 @@ def get_job_detail(
             experience_level=job.experience_level,
             last_date_to_apply=job.last_date_to_apply,
         )
+
+# =========================================================
+# 7. DELETE / CLOSE JOB (Recruiters Only)
+# =========================================================
+@router.delete("/{job_id}", status_code=status.HTTP_200_OK)
+def delete_job(
+    job_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: UserModel = Depends(allow_recruiters)
+):
+    job = db.query(JobModel).filter(JobModel.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+        
+    if not current_user.recruiter or job.company_id != current_user.recruiter.company_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="You can only delete jobs from your company"
+        )
+        
+    db.delete(job)
+    db.commit()
+    return {"message": "Job deleted successfully"}

@@ -83,7 +83,6 @@ class QuestionGenerator:
             question_text = self._generate_contextual_question(
                 base_question=base_q,
                 category=category or selected.get("Category", "Software Engineering"),
-                category=category or selected.get("Category", "Software Engineering"),
                 resume_json=resume_json,
                 difficulty=difficulty,
             )

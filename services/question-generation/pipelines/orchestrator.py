@@ -100,10 +100,11 @@ class InterviewOrchestrator:
             metadata["scenario"] = "question_with_same_category"
 
         metadata["evaluation"] = {
-            "decision":  decision,
-            "score":     flow.get("score_value"),
-            "remarks":   flow.get("remarks"),
-            "feedback":  evaluation.get("feedback"),
+            "decision":   decision,
+            "score":      flow.get("score_value"),
+            "confidence": evaluation.get("confidence"),
+            "remarks":    flow.get("remarks"),
+            "feedback":   evaluation.get("feedback"),
         }
         return question, metadata
 
