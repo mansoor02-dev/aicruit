@@ -28,7 +28,7 @@ _FALLBACK_TEMPLATES: Dict[str, List[str]] = {
     "edge_cases":             ["What could go wrong with that approach?", "How would you handle edge cases?", "What if the input is invalid?"],
 }
 
-_CONVERSATIONAL_PREFIXES = ["", "Let me ask you this: ", "Here's a question: ", "I'd like to know: ", "Quick question: "]
+_CONVERSATIONAL_PREFIXES = ["", "I'd like to know: "]
 
 _DIFFICULTY_GUIDANCE = {
     "easy":   "easy difficulty — single-concept, simple vocabulary, max 15 words, no compound parts",
@@ -82,7 +82,6 @@ class QuestionGenerator:
         if resume_json:
             question_text = self._generate_contextual_question(
                 base_question=base_q,
-                category=category or selected.get("Category", "Software Engineering"),
                 category=category or selected.get("Category", "Software Engineering"),
                 resume_json=resume_json,
                 difficulty=difficulty,
