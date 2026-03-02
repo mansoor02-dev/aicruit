@@ -28,7 +28,7 @@ _FALLBACK_TEMPLATES: Dict[str, List[str]] = {
     "edge_cases":             ["What could go wrong with that approach?", "How would you handle edge cases?", "What if the input is invalid?"],
 }
 
-_CONVERSATIONAL_PREFIXES = ["", "Let me ask you this: ", "Here's a question: ", "I'd like to know: ", "Quick question: "]
+_CONVERSATIONAL_PREFIXES = ["", "I'd like to know: "]
 
 _DIFFICULTY_GUIDANCE = {
     "easy":   "easy difficulty — single-concept, simple vocabulary, max 15 words, no compound parts",

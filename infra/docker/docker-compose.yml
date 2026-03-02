@@ -182,7 +182,24 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
-
+  report-generation:
+    build:
+      context: ../../services/report-generation
+    container_name: aicruit_report_generation
+    ports:
+      - "8012:8012"
+    env_file:
+      - ../../services/report-generation/.env
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8012/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
 volumes:
   pgdata:
