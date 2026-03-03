@@ -1,0 +1,154 @@
+{
+    "name": "Ahmad Tariq",
+    "email": "dev.ahmadtariq@gmail.com",
+    "phone": "+92 320 484 6384",
+    "location": "Islamabad, Pakistan",
+    "linkedin": "https://linkedin.com/in/ahmad-tariq-/",
+    "github": "https://github.com/iAhmadTariq",
+    "website": null,
+    "summary": "Flutter Developer with proven expertise in building scalable, feature-rich applications. Proficient in state management, backend integrations, and delivering clean, industry-standard solutions across diverse domains.",
+    "skills": [
+        "Flutter",
+        "Dart",
+        "JavaScript",
+        "React",
+        "Python",
+        "Node.js",
+        "PHP",
+        "Firebase",
+        "MySQL",
+        "PostgreSQL",
+        "MongoDB",
+        "WebRTC",
+        "Clean Architecture",
+        "MVC",
+        "MVVM",
+        "Dependency Injection",
+        "GoRouter",
+        "Bloc",
+        "GetIt",
+        "Dio",
+        "HTTP",
+        "Provider",
+        "Riverpod",
+        "Supabase",
+        "Cubit",
+        "AdMob"
+    ],
+    "education": [
+        {
+            "degree": "Bachelor\u2019s degree",
+            "field": "Computer Science",
+            "university": "National University of Science and Technology (NUST)",
+            "country": "Pakistan",
+            "start_year": 2022,
+            "end_year": 2026,
+            "gpa": null
+        },
+        {
+            "degree": "Intermediate",
+            "field": "Pre-Engineering",
+            "university": "Government College University (GCU), Lahore",
+            "country": "Pakistan",
+            "start_year": 2020,
+            "end_year": 2022,
+            "gpa": null
+        }
+    ],
+    "experience": [
+        {
+            "title": "Flutter Developer (Part-Time, Remote)",
+            "company": "Code Next Solutions",
+            "location": "Islamabad, Pakistan",
+            "start_date": "2024-07",
+            "end_date": "Present",
+            "duration_months": 1,
+            "description": "Revamped MoltoVino, a wine restaurant app, using Clean Architecture, GoRouter, Bloc, and GetIt, enabling secure payments and automated dispensers. Built a Digital Signage App for Android TVs, handling 200-300 media files with 95% reliability. Reduced development time by 30% using reusable components and state management (BLoC, Provider, Riverpod).",
+            "technologies": [
+                "Clean Architecture",
+                "GoRouter",
+                "Bloc",
+                "GetIt",
+                "Dio",
+                "HTTP",
+                "BLoC",
+                "Provider",
+                "Riverpod"
+            ]
+        },
+        {
+            "title": "Freelance Flutter Developer",
+            "company": "Upwork.com, Freelancer.com",
+            "location": "Remote",
+            "start_date": "2023-08",
+            "end_date": "Present",
+            "duration_months": 12,
+            "description": "Completed 10+ projects with 100% client satisfaction. Published 3+ apps on Play Store/App Store, gaining 5,000+ downloads. Built full-stack apps using Flutter, BLoC, PHP, and Python. Optimized database operations with Firebase, Supabase, MySQL, and MongoDB.",
+            "technologies": [
+                "Flutter",
+                "BLoC",
+                "PHP",
+                "Python",
+                "Firebase",
+                "Supabase",
+                "MySQL",
+                "MongoDB"
+            ]
+        }
+    ],
+    "projects": [
+        {
+            "title": "Molto Vino",
+            "description": "Refactored app with Clean Architecture, GoRouter, Bloc, and GetIt for scalability. Enabled secure payments and automated wine dispensers using Dio/HTTP.",
+            "technologies": [
+                "Flutter",
+                "Dart",
+                "GoRouter",
+                "Bloc",
+                "GetIt",
+                "Dio",
+                "HTTP"
+            ],
+            "role": null,
+            "link": null,
+            "year": 2024
+        },
+        {
+            "title": "Safe Pak",
+            "description": "Built a public safety app for crime reporting, SOS alerts, and legal guidance via AI chatbot. Used Clean Architecture, Supabase, Bloc/Cubit, and GoRouter for scalability.",
+            "technologies": [
+                "Flutter",
+                "Supabase",
+                "Bloc/Cubit",
+                "GoRouter",
+                "Clean Architecture"
+            ],
+            "role": null,
+            "link": null,
+            "year": 2025
+        },
+        {
+            "title": "Chat Caller App",
+            "description": "Developed audio/video calling app with WebRTC and Firebase. Used Clean Architecture, Cubit (BLoC), and AdMob for revenue.",
+            "technologies": [
+                "Flutter",
+                "Firebase",
+                "Bloc",
+                "WebRTC",
+                "Dart",
+                "Cubit",
+                "AdMob",
+                "Clean Architecture"
+            ],
+            "role": null,
+            "link": null,
+            "year": 2024
+        }
+    ],
+    "publications": [],
+    "certifications": [],
+    "languages": [],
+    "awards": [],
+    "extraction_date": "2025-11-26T06:54:24.217949",
+    "source_file": "resume_20251126065336.pdf"
+}

@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from datetime import datetime
 from uuid import UUID
+from typing import Optional
 
 
 class InterviewScheduleRequest(BaseModel):
@@ -17,3 +18,8 @@ class InterviewScheduleResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class StartInterviewRequest(BaseModel):
+    application_id: UUID
+

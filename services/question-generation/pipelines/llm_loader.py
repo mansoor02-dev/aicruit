@@ -10,7 +10,7 @@ load_dotenv()
 class OpenRouterChat:
     """Wrapper for OpenRouter API (OpenAI-compatible)."""
 
-    def __init__(self, model_name: str = "deepseek/deepseek-r1-0528:free"):
+    def __init__(self, model_name: str = "arcee-ai/trinity-large-preview:free"):
         api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:
             raise ValueError("OPENROUTER_API_KEY environment variable not set")
@@ -26,18 +26,25 @@ class OpenRouterChat:
         top_p: float = 0.95,
         **_,
     ) -> Dict[str, Any]:
-        response = self.client.chat.completions.create(
-            model=self.model_name,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            top_p=top_p,
-        )
-        choices = response.choices or []
-        msg = choices[0].message if choices else None
-        content = msg.content.strip() if msg and msg.content else ""
-
-        return {"choices": [{"message": {"role": "assistant", "content": content}}]}
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                top_p=top_p,
+            )
+            choices = response.choices or []
+            msg = choices[0].message if choices else None
+            content = msg.content.strip() if msg and msg.content else ""
+            return {"choices": [{"message": {"role": "assistant", "content": content}}]}
+        except Exception as e:
+            print(f"⚠️  OpenRouter failed ({e}), falling back to Gemini…")
+            return GeminiChat().create_chat_completion(
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
 
 
 class GeminiChat:
@@ -94,3 +101,33 @@ class LLMLoader:
             self._llm = GeminiChat().create_chat_completion
 
         return self._llm
+
+
+# ---------------------------------------------------------------------------
+# Embedder singleton — loads once, reuses forever within the process
+# ---------------------------------------------------------------------------
+from pathlib import Path
+
+_EMBEDDER_CACHE_DIR = str(Path(__file__).resolve().parents[1] / "cache" / "models")
+_embedder_instance = None
+
+
+def get_embedder(model_name: str = "all-MiniLM-L6-v2"):
+    """
+    Return a cached SentenceTransformer instance.
+    - First call: downloads (if needed) and loads the model (~2-3s).
+    - Subsequent calls: returns instantly (same object).
+    - Model files are stored in cache/models/ inside the project.
+    """
+    global _embedder_instance
+    if _embedder_instance is not None:
+        return _embedder_instance
+
+    from sentence_transformers import SentenceTransformer
+
+    Path(_EMBEDDER_CACHE_DIR).mkdir(parents=True, exist_ok=True)
+    _embedder_instance = SentenceTransformer(
+        model_name, device="cpu", cache_folder=_EMBEDDER_CACHE_DIR
+    )
+    _embedder_instance.max_seq_length = 128
+    return _embedder_instance

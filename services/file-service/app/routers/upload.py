@@ -31,7 +31,7 @@ async def upload_file(file: UploadFile = File(...), file_type: str = "other"):
             buffer.write(data)
         size = len(data)
 
-        file_url = f"/static/{file_type}/{filename}"
+        file_url = f"/uploads/{file_type}/{filename}"
 
         # Insert file metadata into database and return id
         session = get_db_session()

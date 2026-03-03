@@ -75,7 +75,7 @@ services:
     ports:
       - "8006:8006"
     env_file:
-      - ../../services/resume-parser/app/.env
+      - ../../services/resume-parser/.env
     environment:
       DB_NAME: aicruit
       DB_USER: admin
@@ -102,6 +102,9 @@ services:
     environment:
       RESUME_PARSER_URL: http://aicruit_resume-parser:8006
       FILE_SERVICE_URL: http://aicruit_file_service:8005
+      QUESTION_GEN_URL: http://aicruit_question_generation:8010
+      TTS_URL: http://aicruit_text_to_speech:8011
+      TRANSCRIBE_URL: http://aicruit_audio_transcribe:8007
       DB_NAME: aicruit
       DB_USER: admin
       DB_PASS: admin123
@@ -115,6 +118,9 @@ services:
       - postgres
       - resume-parser
       - file-service
+      - question-generation
+      - text-to-speech
+      - audio-transcribe
 
   audio-transcribe:
     build:
@@ -151,6 +157,43 @@ services:
     restart: always
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8010/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+  text-to-speech:
+    build:
+      context: ../../services/text-to-speech
+    container_name: aicruit_text_to_speech
+    ports:
+      - "8011:8011"
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ../../services/text-to-speech/cache:/app/cache
+      - ../../services/text-to-speech/logs:/app/logs
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8011/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+  report-generation:
+    build:
+      context: ../../services/report-generation
+    container_name: aicruit_report_generation
+    ports:
+      - "8012:8012"
+    env_file:
+      - ../../services/report-generation/.env
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8012/health"]
       interval: 10s
       timeout: 5s
       retries: 3

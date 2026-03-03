@@ -22,27 +22,52 @@ class InterviewOrchestrator:
         resume_json: Optional[Dict] = None,
         previous_qa_list: Optional[List[Dict]] = None,
         difficulty: str = "medium",
+        category: Optional[str] = None,
     ) -> Tuple[str, Dict]:
         """
-        Generate the next interview question.
+        Route to the correct generation strategy based on three scenarios:
 
-        Args:
-            resume_json:       Candidate resume (optional).
-            previous_qa_list:  List of {"Q": ..., "A": ...} dicts.
-            difficulty:        Desired difficulty for new-topic questions.
+        1. 1st_question   — no history, no category  → introduction question
+        2. new_question   — no history, category set → fresh dataset question
+        3. question_with_same_category
+                          — history + category       → evaluate last answer,
+                            then follow-up or new question within same category
 
         Returns:
             (question_text, metadata)
         """
-        if not previous_qa_list:
-            logger.info("Generating first question")
-            return self.generator.generate_new_topic_question(
-                topics_covered=[], difficulty=difficulty, resume_json=resume_json
+        has_history = bool(previous_qa_list)
+        has_category = bool(category)
+
+        # ------------------------------------------------------------------
+        # Scenario 1: 1st_question
+        # ------------------------------------------------------------------
+        if not has_history and not has_category:
+            logger.info("Scenario: 1st_question — generating introduction question")
+            return self.generator.generate_introduction_question(resume_json=resume_json)
+
+        # ------------------------------------------------------------------
+        # Scenario 2: new_question
+        # ------------------------------------------------------------------
+        if not has_history and has_category:
+            logger.info(f"Scenario: new_question (category opener) — category={category}, difficulty={difficulty}")
+            # Always start a category with a general easy question to warm the
+            # candidate up.  Resume-contextual questions begin in scenario 3.
+            return self.generator.generate_category_opener_question(
+                category=category,
             )
+
+        # ------------------------------------------------------------------
+        # Scenario 3: question_with_same_category
+        # ------------------------------------------------------------------
+        logger.info(
+            f"Scenario: question_with_same_category — category={category}, "
+            f"history_length={len(previous_qa_list)}"
+        )
 
         last_qa = previous_qa_list[-1]
 
-        # Single LLM call → evaluation + flow decision
+        # Evaluate the last answer to decide follow-up vs. new question
         evaluation, flow = self.evaluator.evaluate_combined(
             question=last_qa["Q"],
             user_answer=last_qa["A"],
@@ -61,6 +86,7 @@ class InterviewOrchestrator:
                 previous_answer=last_qa["A"],
                 evaluation_result=flow,
                 resume_json=resume_json,
+                difficulty=difficulty,
             )
         else:
             topics_covered = self._extract_topics(previous_qa_list)
@@ -68,13 +94,17 @@ class InterviewOrchestrator:
                 topics_covered=topics_covered,
                 difficulty=difficulty,
                 resume_json=resume_json,
+                category=category,  # always stay in the provided category
             )
+            # Override scenario tag — still within same category session
+            metadata["scenario"] = "question_with_same_category"
 
         metadata["evaluation"] = {
-            "decision":  decision,
-            "score":     flow.get("score_value"),
-            "remarks":   flow.get("remarks"),
-            "feedback":  evaluation.get("feedback"),
+            "decision":   decision,
+            "score":      flow.get("score_value"),
+            "confidence": evaluation.get("confidence"),
+            "remarks":    flow.get("remarks"),
+            "feedback":   evaluation.get("feedback"),
         }
         return question, metadata
 

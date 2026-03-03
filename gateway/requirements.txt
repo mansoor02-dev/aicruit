@@ -8,3 +8,4 @@ passlib[bcrypt]
 psycopg2-binary
 python-jose[cryptography]
 httpx
+python-multipart

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { RecruiterLayout } from '@/components/layout/RecruiterLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -57,6 +57,14 @@ interface ApplicantInfo {
   resume_url: string;
 }
 
+interface JobUpdateData {
+  title: string;
+  description: string;
+  location: string;
+  type: string;
+  experience_level: string;
+}
+
 interface JobDetail {
   id: string;
   title: string;
@@ -80,6 +88,7 @@ const statusLabels: Record<string, string> = {
   'APPLIED': 'Applied',
   'SCREENING': 'Screening',
   'INTERVIEW_SCHEDULED': 'Interview Scheduled',
+  'INTERVIEW_COMPLETED': 'Interview Completed',
   'OFFERED': 'Offered',
   'REJECTED': 'Rejected'
 };
@@ -88,6 +97,7 @@ const statusColors: Record<string, string> = {
   'APPLIED': 'bg-gray-500/20 text-gray-500 border-gray-500/30',
   'SCREENING': 'bg-blue-500/20 text-blue-500 border-blue-500/30',
   'INTERVIEW_SCHEDULED': 'bg-yellow-500/20 text-yellow-500 border-yellow-500/30',
+  'INTERVIEW_COMPLETED': 'bg-indigo-500/20 text-indigo-500 border-indigo-500/30',
   'OFFERED': 'bg-green-500/20 text-green-500 border-green-500/30',
   'REJECTED': 'bg-red-500/20 text-red-500 border-red-500/30'
 };
@@ -100,7 +110,14 @@ export default function JobDetails() {
   const [selectedApplicant, setSelectedApplicant] = useState<ApplicantInfo | null>(null);
   const [interviewDate, setInterviewDate] = useState<Date>();
   const [interviewTime, setInterviewTime] = useState('');
+  
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState<JobUpdateData>({
+    title: '', description: '', location: '', type: '', experience_level: ''
+  });
+  
   const { toast } = useToast();
+  const router = useRouter();
 
   const safeFormatDate = (value?: string | null) => {
     if (!value) return '—';
@@ -114,6 +131,13 @@ export default function JobDetails() {
         setLoading(true);
         const response: JobDetail = await api.get(`/job/${id}`);
         setJob(response);
+        setEditForm({
+          title: response.title,
+          description: response.description,
+          location: response.location,
+          type: response.type,
+          experience_level: response.experience_level
+        });
       } catch (error) {
         console.error('Failed to fetch job details:', error);
         toast({
@@ -175,11 +199,15 @@ export default function JobDetails() {
     try {
       const [hours, minutes] = interviewTime.split(':').map(Number);
       const scheduledAt = new Date(interviewDate);
-      scheduledAt.setHours(hours, minutes);
+      scheduledAt.setHours(hours, minutes, 0, 0);
+
+      // Manually build ISO string in local time to avoid UTC shift losing the time
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const isoString = `${scheduledAt.getFullYear()}-${pad(scheduledAt.getMonth() + 1)}-${pad(scheduledAt.getDate())}T${pad(hours)}:${pad(minutes)}:00`;
 
       await api.post('/interview/schedule', {
         application_id: selectedApplicant.application_id,
-        scheduled_at: scheduledAt.toISOString(),
+        scheduled_at: isoString,
       });
 
       toast({
@@ -213,6 +241,30 @@ export default function JobDetails() {
     }
   };
 
+  const handleCloseJob = async () => {
+    if (!window.confirm("Are you sure you want to close and delete this job?")) return;
+    try {
+      await api.delete(`/job/${id}`);
+      toast({ title: 'Success', description: 'Job closed successfully.' });
+      router.push('/recruiter/job');
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to close job.', variant: 'destructive' });
+    }
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      // You should hit a PUT endpoint that updates job data
+      const response: JobDetail = await api.put(`/job/${id}`, editForm);
+      setJob({ ...job, ...response });
+      setIsEditing(false);
+      toast({ title: 'Success', description: 'Job updated.' });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to update job.', variant: 'destructive' });
+    }
+  };
+
   return (
     <RecruiterLayout>
       <div className="space-y-6">
@@ -240,11 +292,11 @@ export default function JobDetails() {
               </span>
             </div>
           </div>
-          <Button variant="outline">
+          <Button variant="outline" onClick={() => setIsEditing(true)}>
             <Edit className="w-4 h-4 mr-2" />
             Edit
           </Button>
-          <Button variant="destructive">
+          <Button variant="destructive" onClick={handleCloseJob}>
             <XCircle className="w-4 h-4 mr-2" />
             Close Job
           </Button>
@@ -353,6 +405,14 @@ export default function JobDetails() {
                             <CalendarIcon className="w-4 h-4 mr-2" />
                             <span className="sr-only sm:not-sr-only">Schedule</span>
                           </Button>
+                          {applicant.application_status === 'INTERVIEW_COMPLETED' && (
+                            <Button size="sm" variant="secondary" asChild>
+                              <Link href={`/recruiter/interview-details/${applicant.application_id}`}>
+                                <FileText className="w-4 h-4 mr-2" />
+                                Details
+                              </Link>
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -395,7 +455,11 @@ export default function JobDetails() {
                         mode="single"
                         selected={interviewDate}
                         onSelect={setInterviewDate}
-                        disabled={(date) => date < new Date()}
+                        disabled={(date) => {
+                          const today = new Date();
+                          today.setHours(0, 0, 0, 0);
+                          return date < today;
+                        }}
                         initialFocus
                       />
                     </PopoverContent>
@@ -422,6 +486,73 @@ export default function JobDetails() {
                 </Button>
               </div>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Job Dialog */}
+        <Dialog open={isEditing} onOpenChange={setIsEditing}>
+          <DialogContent className="bg-card sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Edit Job Details</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleEditSubmit} className="space-y-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="title">Title</Label>
+                <Input
+                  id="title"
+                  value={editForm.title}
+                  onChange={(e) => setEditForm({...editForm, title: e.target.value})}
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="description">Description</Label>
+                <textarea
+                  id="description"
+                  className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  value={editForm.description}
+                  onChange={(e) => setEditForm({...editForm, description: e.target.value})}
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="location">Location</Label>
+                <Input
+                  id="location"
+                  value={editForm.location}
+                  onChange={(e) => setEditForm({...editForm, location: e.target.value})}
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="type">Type</Label>
+                    <Input
+                      id="type"
+                      value={editForm.type}
+                      onChange={(e) => setEditForm({...editForm, type: e.target.value})}
+                      required
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="experience">Experience</Label>
+                    <Input
+                      id="experience"
+                      value={editForm.experience_level}
+                      onChange={(e) => setEditForm({...editForm, experience_level: e.target.value})}
+                      required
+                    />
+                  </div>
+              </div>
+              <div className="flex justify-end gap-3 pt-4">
+                <Button type="button" variant="outline" onClick={() => setIsEditing(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit">
+                  Save Changes
+                </Button>
+              </div>
+            </form>
           </DialogContent>
         </Dialog>
       </div>

@@ -1,17 +1,14 @@
 import json
-import pickle
 from datetime import datetime
 from pathlib import Path
 
-import faiss
-import numpy as np
 import pandas as pd
-from sentence_transformers import SentenceTransformer
 
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
 
 from pipelines.answer_evaluator import AnswerEvaluator
+from pipelines.llm_loader import get_embedder
 from pipelines.conversation_manager import ConversationManager
 from pipelines.flow_controller import FlowController
 from pipelines.question_generator import QuestionGenerator
@@ -22,12 +19,9 @@ from pipelines.question_generator import QuestionGenerator
 # ---------------------------------------------------------------------------
 
 class Config:
-    BASE_DIR     = Path(__file__).resolve().parents[1]
-    CSV_PATH     = BASE_DIR / "data" / "software_questions.csv"
-    CACHE_DIR    = BASE_DIR / "cache"
-    INDEX_PATH   = CACHE_DIR / "questions.index"
-    PASSAGES_PKL = CACHE_DIR / "passages.pkl"
-    LOGS_DIR     = BASE_DIR / "logs"
+    BASE_DIR  = Path(__file__).resolve().parents[1]
+    CSV_PATH  = BASE_DIR / "data" / "software_questions.csv"
+    LOGS_DIR  = BASE_DIR / "logs"
 
     EMBED_MODEL     = "all-MiniLM-L6-v2"
     TOTAL_QUESTIONS = 3
@@ -36,7 +30,6 @@ class Config:
 
     @classmethod
     def ensure_dirs(cls) -> None:
-        cls.CACHE_DIR.mkdir(exist_ok=True)
         cls.LOGS_DIR.mkdir(exist_ok=True)
 
 
@@ -68,42 +61,6 @@ def load_questions(csv_path: Path) -> list:
     return questions
 
 
-def build_or_load_index(questions: list, embedder: SentenceTransformer) -> tuple:
-    if Config.INDEX_PATH.exists() and Config.PASSAGES_PKL.exists():
-        try:
-            index = faiss.read_index(str(Config.INDEX_PATH))
-            with open(Config.PASSAGES_PKL, "rb") as f:
-                passages = pickle.load(f)
-            if index.ntotal == len(passages) == len(questions):
-                print(f"✓ Loaded cached index ({index.ntotal} vectors)")
-                return index, passages
-        except Exception as e:
-            print(f"Cache invalid ({e}), rebuilding…")
-
-    print("Building FAISS index…")
-    passages = [
-        {
-            "id": q["id"], "question": q["question"], "answer": q["answer"],
-            "category": q["category"], "difficulty": q["difficulty"],
-        }
-        for q in questions
-    ]
-    texts      = [f"{p['question']} {p['answer']}" for p in passages]
-    embeddings = embedder.encode(
-        texts, batch_size=64, show_progress_bar=True,
-        convert_to_numpy=True, normalize_embeddings=True,
-    ).astype(np.float32)
-
-    index = faiss.IndexFlatIP(embeddings.shape[1])
-    index.add(embeddings)
-    faiss.write_index(index, str(Config.INDEX_PATH))
-    with open(Config.PASSAGES_PKL, "wb") as f:
-        pickle.dump(passages, f)
-
-    print(f"✓ Built index with {index.ntotal} vectors")
-    return index, passages
-
-
 # ---------------------------------------------------------------------------
 # Interview loop
 # ---------------------------------------------------------------------------
@@ -118,11 +75,7 @@ def run_interview() -> None:
     # --- Initialisation ---
     questions = load_questions(Config.CSV_PATH)
 
-    print(f"\nLoading embedding model: {Config.EMBED_MODEL}")
-    embedder = SentenceTransformer(Config.EMBED_MODEL, device="cpu")
-    embedder.max_seq_length = 128
-
-    build_or_load_index(questions, embedder)   # warm the cache
+    embedder = get_embedder(Config.EMBED_MODEL)
 
     print("\nInitialising interview components…")
     conversation    = ConversationManager(total_questions=Config.TOTAL_QUESTIONS)

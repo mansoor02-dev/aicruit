@@ -100,7 +100,7 @@ CREATE TABLE IF NOT EXISTS applications (
     
     -- Status Pipeline
     status VARCHAR(50) DEFAULT 'APPLIED' 
-        CHECK (status IN ('APPLIED', 'SCREENING', 'INTERVIEW_SCHEDULED', 'OFFERED', 'REJECTED')),
+        CHECK (status IN ('APPLIED', 'SCREENING', 'INTERVIEW_SCHEDULED', 'INTERVIEW_COMPLETED', 'OFFERED', 'REJECTED')),
     
     -- AI Scoring (Populate this via your /ai/parse endpoint)
     ai_match_score INT DEFAULT 0, 
@@ -120,7 +120,7 @@ CREATE TABLE IF NOT EXISTS interviews (
     
     scheduled_at TIMESTAMP NOT NULL,
     status VARCHAR(20) DEFAULT 'scheduled'
-        CHECK (status IN ('scheduled','completed','cancelled','expired')),
+        CHECK (status IN ('scheduled','in_progress','completed','cancelled','expired')),
     
     cheating_risk_score INT DEFAULT 0,
     created_at TIMESTAMP DEFAULT NOW(),
@@ -135,6 +135,7 @@ CREATE TABLE IF NOT EXISTS interview_questions (
     interview_id UUID REFERENCES interviews(id) ON DELETE CASCADE,
     question_text TEXT NOT NULL,
     question_order INT, -- To keep sequence 1, 2, 3
+    category VARCHAR(100), -- Skill/topic category (NULL = intro)
     created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -154,7 +155,7 @@ CREATE TABLE IF NOT EXISTS interview_responses (
     ai_score INT,
     confidence_score INT,
     communication_score INT,
-    sentiment VARCHAR(20),
+    sentiment TEXT,
     
     created_at TIMESTAMP DEFAULT NOW()
 );
@@ -213,10 +214,11 @@ CREATE TABLE IF NOT EXISTS cheating_events (
 CREATE TABLE IF NOT EXISTS reports (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     interview_id UUID REFERENCES interviews(id) ON DELETE CASCADE,
-    technical_fit_score INT,
-    communication_score INT,
-    cheating_risk_score INT,
-    summary TEXT,
+    overall_score NUMERIC(5,2),
+    category_scores JSONB,
+    overall_remark TEXT,
+    strengths JSONB,
+    improvements JSONB,
     created_at TIMESTAMP DEFAULT NOW()
 );
 

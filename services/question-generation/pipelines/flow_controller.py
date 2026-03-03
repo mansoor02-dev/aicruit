@@ -50,6 +50,16 @@ class FlowController:
         if questions_asked >= total_questions:
             return FlowDecision(action="end", reason="Interview complete — all topics covered")
 
+        # --- "I don't know" — skip elaboration, move to a new topic ---
+        if (
+            not evaluation.get("needs_followup", True)
+            and evaluation.get("depth_score", 1.0) == 0.0
+        ):
+            return FlowDecision(
+                action="new_topic",
+                reason="Candidate unfamiliar with topic — moving on",
+            )
+
         if topic_depth >= self.max_followups:
             return FlowDecision(
                 action="new_topic",
