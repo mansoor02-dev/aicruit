@@ -21,11 +21,25 @@ interface InterviewDetail {
   video_url: string | null;
 }
 
+interface CategoryScore {
+  category: string;
+  score: number;
+}
+
+interface ReportData {
+  overall_score: number;
+  category_scores: CategoryScore[];
+  overall_remark: string;
+  strengths: string[];
+  improvements: string[];
+}
+
 interface InterviewData {
   interview_id: string;
   status: string;
   scheduled_at: string;
   details: InterviewDetail[];
+  report?: ReportData | null;
 }
 
 export default function InterviewDetailsPage() {
@@ -91,6 +105,69 @@ export default function InterviewDetailsPage() {
             </p>
           </div>
         </div>
+
+        {/* AI Report Card */}
+        {data.report && (
+          <Card className="bg-card">
+            <CardHeader>
+              <CardTitle className="flex justify-between items-center">
+                <span>AI Final Report</span>
+                <Badge variant="default" className="text-lg py-1 px-3">Overall Score: {data.report.overall_score}/10</Badge>
+              </CardTitle>
+              <CardDescription>Generated assessment based on logic, communication, and technical correctness.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              
+              <div className="space-y-2">
+                <h3 className="font-semibold text-foreground border-b pb-2">Overall Evaluator Remarks</h3>
+                <p className="text-muted-foreground whitespace-pre-wrap">{data.report.overall_remark}</p>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Strengths */}
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-foreground border-b pb-2">Strengths</h3>
+                  <ul className="list-disc pl-5 space-y-2 text-muted-foreground">
+                    {data.report.strengths.map((str, idx) => (
+                      <li key={idx}>{str}</li>
+                    ))}
+                  </ul>
+                </div>
+                {/* Improvements */}
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-foreground border-b pb-2">Areas for Improvement</h3>
+                  <ul className="list-disc pl-5 space-y-2 text-muted-foreground">
+                    {data.report.improvements.map((imp, idx) => (
+                      <li key={idx}>{imp}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+
+              {/* Category Breakdown */}
+              <div className="space-y-3 pt-4">
+                <h3 className="font-semibold text-foreground border-b pb-2">Category Breakdown</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {data.report.category_scores.map((cat, idx) => (
+                    <div key={idx} className="bg-muted p-4 rounded-lg space-y-2 border">
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium text-sm">{cat.category}</span>
+                        <span className="text-sm font-bold">{cat.score.toFixed(1)}/10</span>
+                      </div>
+                      <div className="h-2 w-full bg-background rounded-full overflow-hidden">
+                        <div 
+                           className="h-full bg-primary" 
+                           style={{ width: `${(cat.score / 10) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+            </CardContent>
+          </Card>
+        )}
 
         {/* Details Table Card */}
         <Card className="bg-card">

@@ -214,10 +214,11 @@ CREATE TABLE IF NOT EXISTS cheating_events (
 CREATE TABLE IF NOT EXISTS reports (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     interview_id UUID REFERENCES interviews(id) ON DELETE CASCADE,
-    technical_fit_score INT,
-    communication_score INT,
-    cheating_risk_score INT,
-    summary TEXT,
+    overall_score NUMERIC(5,2),
+    category_scores JSONB,
+    overall_remark TEXT,
+    strengths JSONB,
+    improvements JSONB,
     created_at TIMESTAMP DEFAULT NOW()
 );
 

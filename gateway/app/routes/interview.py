@@ -17,6 +17,7 @@ from ..models.interview_response_model import InterviewResponseModel
 from ..models.application_model import ApplicationModel
 from ..models.job_model import JobModel
 from ..models.user import UserModel
+from ..models.report_model import ReportModel
 from ..models.interview import (
     InterviewScheduleRequest,
     InterviewScheduleResponse,
@@ -42,6 +43,7 @@ ANSWER_TIMEOUT_SECONDS = 300
 QUESTION_GEN_URL = os.getenv("QUESTION_GEN_URL", "http://aicruit_question_generation:8010")
 TTS_URL = os.getenv("TTS_URL", "http://aicruit_text_to_speech:8011")
 TRANSCRIBE_URL = os.getenv("TRANSCRIBE_URL", "http://aicruit_audio_transcribe:8007")
+REPORT_GEN_URL = os.getenv("REPORT_GEN_URL", "http://aicruit_report_generation:8012")
 
 # Hardcoded resume path (inside the gateway container, mounted or copied)
 HARDCODED_RESUME_PATH = os.getenv(
@@ -710,6 +712,58 @@ def end_interview(
     application = db.query(ApplicationModel).filter(ApplicationModel.id == interview.application_id).first()
     if application:
         application.status = "INTERVIEW_COMPLETED"
+        
+    # Generate Report
+    questions = (
+        db.query(InterviewQuestionModel)
+        .filter(InterviewQuestionModel.interview_id == interview.id)
+        .order_by(InterviewQuestionModel.question_order.asc())
+        .all()
+    )
+    
+    payload_data = []
+    for q in questions:
+        resp = db.query(InterviewResponseModel).filter(InterviewResponseModel.question_id == q.id).first()
+        ai_score = resp.ai_score if resp and resp.ai_score is not None else None
+        
+        # Normalize score
+        score_out_of_5 = 1
+        if ai_score is not None:
+            # Current ai_score is percentage 0-100. Convert to 1-5.
+            score_out_of_5 = max(1, min(5, round(ai_score * 5 / 100)))
+
+        remarks = resp.sentiment if resp and resp.sentiment else ""
+        
+        payload_data.append({
+            "q": q.question_text,
+            "a": resp.transcript if resp and resp.transcript else "",
+            "category": q.category or "Intro",
+            "ai_score": score_out_of_5,
+            "remarks": remarks
+        })
+        
+    if payload_data:
+        try:
+            with httpx.Client(timeout=120.0) as client:
+                report_resp = client.post(f"{REPORT_GEN_URL}/generate-report", json={"data": payload_data})
+                report_resp.raise_for_status()
+                report_data = report_resp.json()
+                
+                recruiter = report_data.get("recruiter_report", {})
+                candidate = report_data.get("candidate_report", {})
+                
+                new_report = ReportModel(
+                    interview_id=interview.id,
+                    overall_score=recruiter.get("overall_score"),
+                    category_scores=recruiter.get("category_scores"),
+                    overall_remark=recruiter.get("overall_remark"),
+                    strengths=candidate.get("strengths"),
+                    improvements=candidate.get("improvements"),
+                )
+                db.add(new_report)
+        except Exception as e:
+            print(f"FAILED TO GENERATE REPORT: {e}")
+
     db.commit()
 
     return {"message": "Interview ended successfully.", "interview_id": str(interview_id)}
@@ -758,9 +812,21 @@ def get_interview_details(
             "video_url": resp.video_url if resp else None
         })
         
+    report = db.query(ReportModel).filter(ReportModel.interview_id == interview.id).first()
+    report_data = None
+    if report:
+        report_data = {
+            "overall_score": report.overall_score,
+            "category_scores": report.category_scores,
+            "overall_remark": report.overall_remark,
+            "strengths": report.strengths,
+            "improvements": report.improvements
+        }
+        
     return {
         "interview_id": str(interview.id),
         "status": interview.status,
         "scheduled_at": interview.scheduled_at,
-        "details": details
+        "details": details,
+        "report": report_data
     }

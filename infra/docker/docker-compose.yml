@@ -167,8 +167,6 @@ services:
     container_name: aicruit_text_to_speech
     ports:
       - "8011:8011"
-    env_file:
-      - ../../services/text-to-speech/.env
     environment:
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"
