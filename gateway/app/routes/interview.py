@@ -39,11 +39,13 @@ MAX_QUESTIONS = 10
 # Answer timeout in seconds (5 minutes) — anti-cheat measure
 ANSWER_TIMEOUT_SECONDS = 300
 
-# Service URLs (use container names inside Docker, fallback for local dev)
-QUESTION_GEN_URL = os.getenv("QUESTION_GEN_URL", "http://aicruit_question_generation:8010")
-TTS_URL = os.getenv("TTS_URL", "http://aicruit_text_to_speech:8011")
-TRANSCRIBE_URL = os.getenv("TRANSCRIBE_URL", "http://aicruit_audio_transcribe:8007")
-REPORT_GEN_URL = os.getenv("REPORT_GEN_URL", "http://aicruit_report_generation:8012")
+# Service URLs — MUST be set via environment variables on Railway
+# In local Docker dev, set these to the container-name URLs (e.g. http://aicruit_question_generation:8010)
+# On Railway, set these to the Railway-generated service URLs
+QUESTION_GEN_URL = os.getenv("QUESTION_GEN_URL", "http://localhost:8010")
+TTS_URL = os.getenv("TTS_URL", "http://localhost:8011")
+TRANSCRIBE_URL = os.getenv("TRANSCRIBE_URL", "http://localhost:8007")
+REPORT_GEN_URL = os.getenv("REPORT_GEN_URL", "http://localhost:8012")
 
 # Hardcoded resume path (inside the gateway container, mounted or copied)
 HARDCODED_RESUME_PATH = os.getenv(

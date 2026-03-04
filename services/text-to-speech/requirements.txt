@@ -4,5 +4,6 @@ piper-tts
 # ── REST API ─────────────────────────────────────────────────────
 fastapi
 uvicorn[standard]
+gunicorn
 pydantic
 python-dotenv

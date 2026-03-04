@@ -66,7 +66,8 @@ export function ApplyJobModal({
       formData.append('file', file);
       formData.append('file_type', 'Resume');
 
-      const response = await fetch('http://localhost:8005/upload-file', {
+      const fileServiceUrl = process.env.NEXT_PUBLIC_FILE_SERVICE_URL || 'http://localhost:8005';
+      const response = await fetch(`${fileServiceUrl}/upload-file`, {
         method: 'POST',
         body: formData,
       });

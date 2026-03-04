@@ -1,6 +1,7 @@
 faiss-cpu
 fastapi==0.115.5
 uvicorn==0.32.1
+gunicorn
 pydantic==2.10.3
 numpy==1.26.4
 pandas==2.2.3

@@ -30,6 +30,6 @@ ENV GEMINI_API_KEY=""
 ENV MODEL_PATH="/app/models/qwen2.5-1.5b-instruct-q4_k_m.gguf"
 ENV INFERENCE_BACKEND="gemini"
 
-EXPOSE 8006
+ENV PORT=8006
 
-CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8006"]
+CMD uvicorn api:app --host 0.0.0.0 --port $PORT

@@ -1,6 +1,7 @@
 boto3
 fastapi
 uvicorn
+gunicorn
 pydantic-settings
 SQLAlchemy
 python-dotenv

@@ -11,7 +11,8 @@ DATABASE_URL = os.getenv("DATABASE_URL") or (
     f"postgresql+psycopg2://{os.getenv('DB_USER','admin')}:{os.getenv('DB_PASS','admin123')}@{os.getenv('DB_HOST','postgres')}:{os.getenv('DB_PORT','5432')}/{os.getenv('DB_NAME','aicruit')}"
 )
 
-print(f"[DB] Connecting to: {DATABASE_URL}")  # Debug log to verify connection string
+
+
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

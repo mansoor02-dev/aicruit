@@ -17,10 +17,10 @@ COPY . .
 ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app
 
-EXPOSE 8011
+ENV PORT=8011
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8011/health')"
+    CMD python -c "import urllib.request, os; urllib.request.urlopen(f'http://localhost:{os.environ.get(\"PORT\", 8011)}/health')"
 
 # Default: run REST API
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8011"]
+CMD uvicorn main:app --host 0.0.0.0 --port $PORT

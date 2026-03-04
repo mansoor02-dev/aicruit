@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import { getAuthToken } from '@/lib/api';
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const QUESTION_TIMER_SECONDS = 180; // 3 minutes per question
 const MAX_QUESTIONS = 10;
 

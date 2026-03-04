@@ -23,8 +23,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Expose port (change if your app uses different port)
-EXPOSE 8010
+ENV PORT=8010
 
-# Start command (modify if different)
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8010", "--app-dir", "app"]
+# Start command
+CMD uvicorn main:app --host 0.0.0.0 --port $PORT --app-dir app

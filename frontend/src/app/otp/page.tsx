@@ -9,6 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useToast } from '@/hooks/use-toast';
 import { ArrowRight, Loader2, Mail } from 'lucide-react';
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
 const OTPVerification = () => {
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
@@ -40,7 +42,7 @@ const OTPVerification = () => {
 
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8000/auth/confirm-signup', {
+      const response = await fetch(`${API_BASE_URL}/auth/confirm-signup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -83,7 +85,7 @@ const OTPVerification = () => {
   const handleResendOTP = async () => {
     setResendLoading(true);
     try {
-      const response = await fetch('http://localhost:8000/auth/resend-otp', {
+      const response = await fetch(`${API_BASE_URL}/auth/resend-otp`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

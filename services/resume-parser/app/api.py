@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -5,6 +7,7 @@ from typing import Optional
 import json
 import time
 import requests
+from dotenv import load_dotenv
 
 from app.ingestion import ingest_bytes
 from app.cleaner import clean_text
@@ -12,7 +15,12 @@ from app.inference import run_inference
 from app.validator import validate
 from app.db import get_db_session, Resume, init_db
 
+load_dotenv()
+
 app = FastAPI(title="Resume Parser API", version="1.0.0")
+
+# File service URL — set via env var on Railway
+FILE_SERVICE_URL = os.getenv("FILE_SERVICE_URL", "http://localhost:8005")
 
 # Initialise DB tables on startup
 init_db()
@@ -111,14 +119,14 @@ async def parse_resume_by_id(request: ParseResumeByIdRequest):
                 skills=skills,
             )
 
-        # Resolve internal Docker service URL if needed
+        # Resolve file URL using the FILE_SERVICE_URL env var
         file_url = resume_row.file_url
         for local in ("localhost:8005", "127.0.0.1:8005"):
             if local in file_url:
-                file_url = file_url.replace(local, "aicruit_file_service:8005")
+                file_url = file_url.replace(f"http://{local}", FILE_SERVICE_URL)
                 break
         if file_url.startswith("/"):
-            file_url = f"http://aicruit_file_service:8005{file_url}"
+            file_url = f"{FILE_SERVICE_URL}{file_url}"
 
         # Download the resume file
         try:
