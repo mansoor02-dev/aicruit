@@ -1,9 +1,37 @@
-from pydantic import BaseModel
-from typing import List, Optional
+from pydantic import BaseModel, Field
+from typing import List, Optional, Literal
 from datetime import datetime
 from uuid import UUID
 
-# Base schema for shared properties
+
+# ---------------------------------------------------------------------------
+# Custom application question (recruiter defines, candidate answers)
+# ---------------------------------------------------------------------------
+QuestionType = Literal[
+    "text", "textarea", "number", "date", "select", "yes_no", "email", "url"
+]
+
+
+class ApplicationQuestion(BaseModel):
+    """Recruiter-defined question attached to a job's application form."""
+    id: str
+    label: str
+    help_text: Optional[str] = None
+    type: QuestionType = "text"
+    required: bool = False
+    # Text constraints
+    min_length: Optional[int] = None
+    max_length: Optional[int] = None
+    # Number constraints
+    min_value: Optional[float] = None
+    max_value: Optional[float] = None
+    # Select options (only for type == "select")
+    options: Optional[List[str]] = None
+
+
+# ---------------------------------------------------------------------------
+# Job schemas
+# ---------------------------------------------------------------------------
 class JobBase(BaseModel):
     title: str
     description: str
@@ -11,15 +39,16 @@ class JobBase(BaseModel):
     type: Optional[str] = "Full Time"
     salary_min: Optional[int] = None
     salary_max: Optional[int] = None
-    required_skills: List[str] = [] # e.g. ["Flutter", "FastAPI"]
+    required_skills: List[str] = []  # e.g. ["Flutter", "FastAPI"]
     experience_level: str
     last_date_to_apply: Optional[datetime] = None
+    application_questions: List[ApplicationQuestion] = []
 
-# Schema for CREATING a job (Frontend Input)
+
 class JobCreate(JobBase):
     pass
 
-# Schema for UPDATING a job (Partial updates allowed)
+
 class JobUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
@@ -31,17 +60,16 @@ class JobUpdate(BaseModel):
     experience_level: Optional[str] = None
     last_date_to_apply: Optional[datetime] = None
     status: Optional[str] = None
+    application_questions: Optional[List[ApplicationQuestion]] = None
 
-# Schema for READING a job (Backend Response)
+
 class JobResponse(JobBase):
     id: UUID
     company_id: UUID
     recruiter_id: UUID
     status: str
     created_at: datetime
-    
-    # Optional: Helper to show company name nicely
-    company_name: Optional[str] = None 
+    company_name: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -51,9 +79,7 @@ class JobResponse(JobBase):
 class MyApplicationResponse(BaseModel):
     application_id: UUID
     application_status: str
-    # ai_match_score: int
     applied_at: datetime
-    # Job details
     job_id: UUID
     job_title: str
     job_description: str
@@ -75,13 +101,11 @@ class ApplicantInfo(BaseModel):
     application_status: str
     ai_match_score: int
     applied_at: datetime
-    # Candidate details
     candidate_id: UUID
     candidate_name: str
     candidate_email: str
     candidate_phone: Optional[str]
     candidate_linkedin: Optional[str]
-    # Resume info
     resume_id: Optional[UUID]
     resume_url: str
 

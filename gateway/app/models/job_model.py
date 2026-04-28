@@ -33,6 +33,10 @@ class JobModel(Base):
     status = Column(String(20), default="OPEN")   # OPEN, CLOSED
     last_date_to_apply = Column(DateTime, nullable=True)
     
+    # --- Custom Application Questions (recruiter-defined per job) ---
+    # JSONB array of question objects: { id, label, type, required, min_length, max_length, options, ... }
+    application_questions = Column(JSONB, default=list)
+    
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 

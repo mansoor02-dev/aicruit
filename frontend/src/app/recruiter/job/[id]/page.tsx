@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -24,6 +24,7 @@ import {
   Calendar as CalendarIcon,
   FileText,
   Edit,
+  Settings,
   XCircle,
   Download,
   Loader2
@@ -120,9 +121,9 @@ export default function JobDetails() {
   const router = useRouter();
 
   const safeFormatDate = (value?: string | null) => {
-    if (!value) return '—';
+    if (!value) return 'â€”';
     const d = new Date(value);
-    return isNaN(d.getTime()) ? '—' : format(d, 'MMM d, yyyy');
+    return isNaN(d.getTime()) ? 'â€”' : format(d, 'MMM d, yyyy');
   };
 
   useEffect(() => {
@@ -292,6 +293,12 @@ export default function JobDetails() {
               </span>
             </div>
           </div>
+          <Button variant="outline" asChild>
+            <Link href={`/recruiter/job/${id}/interview-settings`}>
+              <Settings className="w-4 h-4 mr-2" />
+              Interview Settings
+            </Link>
+          </Button>
           <Button variant="outline" onClick={() => setIsEditing(true)}>
             <Edit className="w-4 h-4 mr-2" />
             Edit
@@ -365,10 +372,10 @@ export default function JobDetails() {
                   </TableRow>
                 ) : (
                   applicants.map((applicant) => (
-                    <TableRow key={applicant.application_id}>
+                    <TableRow key={applicant.application_id} className="cursor-pointer hover:bg-muted/50" onClick={() => router.push(`/recruiter/job/${id}/candidate/${applicant.application_id}`)}>
                       <TableCell>
                         <div>
-                          <p className="font-medium">{applicant.candidate_name}</p>
+                          <p className="font-medium text-primary hover:underline">{applicant.candidate_name}</p>
                           <p className="text-xs text-muted-foreground">{applicant.candidate_email}</p>
                         </div>
                       </TableCell>
@@ -387,7 +394,7 @@ export default function JobDetails() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
+                        <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                           <Button
                             variant="ghost"
                             size="sm"

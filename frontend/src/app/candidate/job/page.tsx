@@ -27,6 +27,21 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
 
+type ApplicationQuestionType = "text" | "textarea" | "number" | "date" | "select" | "yes_no" | "email" | "url";
+
+interface ApplicationQuestion {
+  id: string;
+  label: string;
+  help_text?: string;
+  type: ApplicationQuestionType;
+  required: boolean;
+  min_length?: number | null;
+  max_length?: number | null;
+  min_value?: number | null;
+  max_value?: number | null;
+  options?: string[];
+}
+
 interface JobApiResponse {
   id: string;
   title: string;
@@ -42,6 +57,7 @@ interface JobApiResponse {
   status: string;
   created_at: string;
   company_name?: string;
+  application_questions?: ApplicationQuestion[];
 }
 
 export default function CandidateJobs() {
@@ -53,8 +69,10 @@ export default function CandidateJobs() {
   const [experienceFilter, setExperienceFilter] = useState('all');
   const [appliedJobs, setAppliedJobs] = useState<string[]>([]);
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
-  const [selectedJobForApply, setSelectedJobForApply] = useState<{ id: string; title: string } | null>(null);
+  const [selectedJobForApply, setSelectedJobForApply] = useState<{ id: string; title: string; application_questions?: ApplicationQuestion[] } | null>(null);
   const { toast } = useToast();
+
+  const [jobQuestionsById, setJobQuestionsById] = useState<Record<string, ApplicationQuestion[]>>({});
 
   const fetchJobs = async () => {
     try {
@@ -81,6 +99,11 @@ export default function CandidateJobs() {
         }));
       console.log('Mapped jobs:', mappedJobs);
       setJobs(mappedJobs);
+      const qmap: Record<string, ApplicationQuestion[]> = {};
+      for (const j of response) {
+        qmap[j.id] = j.application_questions || [];
+      }
+      setJobQuestionsById(qmap);
     } catch (error) {
       console.error('Failed to fetch jobs:', error);
       // Don't show toast for now, just log
@@ -113,7 +136,7 @@ export default function CandidateJobs() {
   });
 
   const handleApply = (jobId: string, jobTitle: string) => {
-    setSelectedJobForApply({ id: jobId, title: jobTitle });
+    setSelectedJobForApply({ id: jobId, title: jobTitle, application_questions: jobQuestionsById[jobId] || [] });
     setIsApplyModalOpen(true);
   };
 
@@ -292,6 +315,7 @@ export default function CandidateJobs() {
         <ApplyJobModal
           jobId={selectedJobForApply.id}
           jobTitle={selectedJobForApply.title}
+          applicationQuestions={selectedJobForApply.application_questions || []}
           isOpen={isApplyModalOpen}
           onClose={() => setIsApplyModalOpen(false)}
           onApplySuccess={handleApplySuccess}

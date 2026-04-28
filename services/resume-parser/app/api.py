@@ -127,6 +127,10 @@ async def parse_resume_by_id(request: ParseResumeByIdRequest):
                 break
         if file_url.startswith("/"):
             file_url = f"{FILE_SERVICE_URL}{file_url}"
+            
+        # Fix file service mount path: /uploads is served at /static
+        if "/uploads/" in file_url:
+            file_url = file_url.replace("/uploads/", "/static/", 1)
 
         # Download the resume file
         try:

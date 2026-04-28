@@ -72,11 +72,19 @@ class QA(BaseModel):
     Q: str
     A: str
 
+
+class PoolQuestion(BaseModel):
+    question: str
+    topic: Optional[str] = None
+
+
 class QuestionRequest(BaseModel):
     resume_json: Optional[Dict[str | None, Any]] = None
     previous_qa: Optional[List[QA]] = []
     difficulty: str = "medium"
     category: Optional[str] = None
+    question_pool: Optional[List[PoolQuestion]] = None
+    used_pool_questions: Optional[List[str]] = None
 
 
 # ------------------------------------------------------------------
@@ -109,8 +117,61 @@ async def get_next_question(req: QuestionRequest):
 
         logger.info(
             f"Generating question: history_length={len(previous_qa_list or [])}, "
-            f"difficulty={req.difficulty}, category={req.category}"
+            f"difficulty={req.difficulty}, category={req.category}, "
+            f"pool_size={len(req.question_pool or [])}"
         )
+
+        # If a recruiter-uploaded pool exists, prefer picking from it.
+        if req.question_pool:
+            used = set(req.used_pool_questions or [])
+            target_topic = (req.category or "").strip().lower()
+
+            def _topic_match(q: PoolQuestion) -> bool:
+                if not target_topic:
+                    return True
+                t = (q.topic or "").strip().lower()
+                return t == target_topic
+
+            unused = [q for q in req.question_pool if q.question not in used]
+            preferred = [q for q in unused if _topic_match(q)]
+
+            chosen = None
+            if preferred:
+                chosen = preferred[0]
+            elif unused:
+                chosen = unused[0]
+
+            if chosen is not None:
+                metadata = {
+                    "source": "recruiter_pool",
+                    "scenario": "new_question",
+                    "question_id": None,
+                    "category": chosen.topic or req.category or "Unknown",
+                    "difficulty": req.difficulty,
+                    "reference_answer": "",
+                    "is_followup": False,
+                    "evaluation": {},
+                }
+                # Still evaluate prior answer if there is history, to populate scores
+                if previous_qa_list:
+                    last_qa = previous_qa_list[-1]
+                    try:
+                        evaluation, flow = orchestrator.evaluator.evaluate_combined(
+                            question=last_qa["Q"],
+                            user_answer=last_qa["A"],
+                            reference_answer=last_qa.get("reference_answer"),
+                            is_followup=last_qa.get("is_followup", False),
+                        )
+                        metadata["evaluation"] = {
+                            "decision":   flow.get("decision"),
+                            "score":      flow.get("score_value"),
+                            "confidence": evaluation.get("confidence"),
+                            "remarks":    flow.get("remarks"),
+                            "feedback":   evaluation.get("feedback"),
+                        }
+                    except Exception as eval_exc:
+                        logger.warning(f"Pool path evaluator failed: {eval_exc}")
+                return {"question": chosen.question, "metadata": metadata}
 
         question, metadata = orchestrator.generate_next_question(
             resume_json=req.resume_json or {},

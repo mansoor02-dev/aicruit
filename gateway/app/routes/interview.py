@@ -18,6 +18,8 @@ from ..models.application_model import ApplicationModel
 from ..models.job_model import JobModel
 from ..models.user import UserModel
 from ..models.report_model import ReportModel
+from ..models.resume_model import ResumeModel
+from ..models.job_interview_settings_model import JobInterviewSettingsModel
 from ..models.interview import (
     InterviewScheduleRequest,
     InterviewScheduleResponse,
@@ -33,11 +35,27 @@ allow_recruiters = RoleChecker(["RECRUITER", "ADMIN"])
 # How many questions to ask per category/skill before switching
 QUESTIONS_PER_CATEGORY = 3
 
-# Maximum number of interview questions
-MAX_QUESTIONS = 10
+# Default maximum number of interview questions when no settings are configured
+DEFAULT_MAX_QUESTIONS = 10
 
 # Answer timeout in seconds (5 minutes) — anti-cheat measure
 ANSWER_TIMEOUT_SECONDS = 300
+
+# Early termination: end interview after this many consecutive low-scoring answers
+LOW_SCORE_STREAK_LIMIT = 4
+LOW_SCORE_THRESHOLD_PERCENT = 50  # ai_score is stored as 0-100 integer
+
+# Maps the settings difficulty_level enum onto the question-generation service's
+# difficulty token. The QG service prompt understands {easy, medium, hard}; we
+# project our four-tier enum onto that space and pass through the raw value too
+# (the QG service ignores unknowns and the prompt now also receives `difficulty`
+# as a string parameter).
+_DIFFICULTY_MAP = {
+    "low": "easy",
+    "medium": "medium",
+    "high": "hard",
+    "very_high": "hard",
+}
 
 # Service URLs — MUST be set via environment variables on Railway
 # In local Docker dev, set these to the container-name URLs (e.g. http://aicruit_question_generation:8010)
@@ -47,70 +65,171 @@ TTS_URL = os.getenv("TTS_URL", "http://localhost:8011")
 TRANSCRIBE_URL = os.getenv("TRANSCRIBE_URL", "http://localhost:8007")
 REPORT_GEN_URL = os.getenv("REPORT_GEN_URL", "http://localhost:8012")
 
-# Hardcoded resume path (inside the gateway container, mounted or copied)
-HARDCODED_RESUME_PATH = os.getenv(
-    "HARDCODED_RESUME_PATH",
-    os.path.join(os.path.dirname(__file__), "..", "..", "hardcoded_resume.json"),
-)
-
-
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 
-def _load_hardcoded_resume() -> dict:
-    """Load the hardcoded resume JSON. Falls back to an inline dict if file is missing."""
-    try:
-        with open(HARDCODED_RESUME_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        pass
+def _load_candidate_resume(db: Session, interview_id) -> dict:
+    """
+    Load the candidate's resume JSON from the database for the given interview.
+    Path: interview → application → (resume_id | candidate.resumes[latest]).
 
-    # Inline fallback
+    Raises HTTPException(400) if no resume can be found.
+    """
+    interview = (
+        db.query(InterviewModel)
+        .filter(InterviewModel.id == interview_id)
+        .first()
+    )
+    if not interview:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Interview not found.",
+        )
+
+    application = (
+        db.query(ApplicationModel)
+        .filter(ApplicationModel.id == interview.application_id)
+        .first()
+    )
+    if not application:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Application not found for this interview.",
+        )
+
+    resume = None
+    if application.resume_id:
+        resume = db.query(ResumeModel).filter(ResumeModel.id == application.resume_id).first()
+    if resume is None:
+        resume = (
+            db.query(ResumeModel)
+            .filter(ResumeModel.candidate_id == application.candidate_id)
+            .order_by(ResumeModel.created_at.desc())
+            .first()
+        )
+
+    if resume is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No resume found for this candidate. Please upload a resume before starting the interview.",
+        )
+
+    parsed_skills: list = []
+    if resume.parsed_skills:
+        try:
+            parsed = json.loads(resume.parsed_skills)
+            if isinstance(parsed, list):
+                parsed_skills = parsed
+            elif isinstance(parsed, dict) and "skills" in parsed:
+                parsed_skills = parsed.get("skills") or []
+        except (ValueError, TypeError):
+            parsed_skills = []
+
     return {
-        "name": "Ahmad Tariq",
-        "email": "dev.ahmadtariq@gmail.com",
-        "phone": "+92 320 484 6384",
-        "location": "Islamabad, Pakistan",
-        "linkedin": "https://linkedin.com/in/ahmad-tariq-",
-        "github": "https://github.com/iAhmadTariq",
-        "website": None,
-        "summary": "Flutter Developer with proven expertise in building scalable, feature-rich applications.",
-        "skills": [
-            "Flutter", "Dart", "JavaScript", "React", "Python", "Node.js", "PHP",
-            "Firebase", "MySQL", "PostgreSQL", "MongoDB", "WebRTC",
-            "Clean Architecture", "MVC", "MVVM", "Dependency Injection",
-            "GoRouter", "Bloc", "GetIt", "Dio", "HTTP", "Supabase",
-            "Cubit", "Provider", "Riverpod", "AdMob", "Android TVs",
-        ],
-        "education": [
-            {
-                "degree": "Bachelor\u2019s degree",
-                "field": "Computer Science",
-                "university": "National University of Science and Technology (NUST)",
-                "country": "Pakistan",
-                "start_year": 2022,
-                "end_year": 2026,
-                "gpa": None,
-            },
-        ],
-        "experience": [
-            {
-                "title": "Flutter Developer",
-                "company": "Code Next Solutions",
-                "location": "Islamabad, Pakistan",
-                "start_date": "2024-07",
-                "end_date": "Present",
-                "duration_months": 2,
-                "description": "Revamped MoltoVino, a wine restaurant app.",
-                "technologies": ["Flutter", "Clean Architecture", "GoRouter", "Bloc", "GetIt"],
-            },
-        ],
-        "projects": [],
-        "publications": [],
-        "certifications": [],
-        "languages": [],
-        "awards": [],
+        "name": application.applicant_name or "",
+        "email": application.applicant_email or "",
+        "phone": application.applicant_phone or "",
+        "location": application.applicant_location or "",
+        "summary": application.summary or "",
+        "skills": parsed_skills or (application.skills or []),
+        "education": application.education or [],
+        "experience": application.experience or [],
+        "projects": application.projects or [],
+        "parsed_text": resume.parsed_text or "",
     }
+
+
+def _get_settings_for_interview(db: Session, interview_id):
+    """Fetch job_interview_settings via interview → application → job."""
+    interview = (
+        db.query(InterviewModel)
+        .filter(InterviewModel.id == interview_id)
+        .first()
+    )
+    if not interview:
+        return None
+    application = (
+        db.query(ApplicationModel)
+        .filter(ApplicationModel.id == interview.application_id)
+        .first()
+    )
+    if not application:
+        return None
+    return (
+        db.query(JobInterviewSettingsModel)
+        .filter(JobInterviewSettingsModel.job_id == application.job_id)
+        .first()
+    )
+
+
+def _resolve_difficulty(settings) -> str:
+    """
+    Map settings.difficulty_level to a token the question-generation service
+    understands. 'varying' or unset preserves the existing 'medium' default.
+    """
+    if settings is None or not settings.difficulty_level or settings.difficulty_level == "varying":
+        return "medium"
+    return _DIFFICULTY_MAP.get(settings.difficulty_level, "medium")
+
+
+def _resolve_max_questions(settings) -> int:
+    if settings is None:
+        return DEFAULT_MAX_QUESTIONS
+    if settings.fixed_question_count:
+        return settings.number_of_questions or DEFAULT_MAX_QUESTIONS
+    return settings.max_questions or DEFAULT_MAX_QUESTIONS
+
+
+def _build_question_pool(settings) -> list[dict]:
+    """Return uploaded_questions as a clean list of {question, topic} dicts."""
+    if settings is None or not settings.uploaded_questions:
+        return []
+    pool: list[dict] = []
+    for item in settings.uploaded_questions:
+        if not isinstance(item, dict):
+            continue
+        q_text = item.get("question")
+        if not q_text:
+            continue
+        pool.append({"question": q_text, "topic": item.get("topic")})
+    return pool
+
+
+def _used_pool_questions(db: Session, interview_id) -> list[str]:
+    rows = (
+        db.query(InterviewQuestionModel.question_text)
+        .filter(InterviewQuestionModel.interview_id == interview_id)
+        .all()
+    )
+    return [r[0] for r in rows]
+
+
+def _consecutive_low_score_streak(db: Session, interview_id) -> int:
+    """
+    Walk responses in question order; count the trailing consecutive responses
+    with ai_score < LOW_SCORE_THRESHOLD_PERCENT (0-100). Responses with no score
+    do not extend or break the streak.
+    """
+    questions = (
+        db.query(InterviewQuestionModel)
+        .filter(InterviewQuestionModel.interview_id == interview_id)
+        .order_by(InterviewQuestionModel.question_order.asc())
+        .all()
+    )
+    streak = 0
+    for q in questions:
+        resp = (
+            db.query(InterviewResponseModel)
+            .filter(InterviewResponseModel.question_id == q.id)
+            .first()
+        )
+        if resp is None or resp.ai_score is None:
+            continue
+        if resp.ai_score < LOW_SCORE_THRESHOLD_PERCENT:
+            streak += 1
+        else:
+            streak = 0
+    return streak
 
 
 def _generate_question(
@@ -118,19 +237,27 @@ def _generate_question(
     previous_qa: list,
     difficulty: str = "medium",
     category: Optional[str] = None,
+    question_pool: Optional[list[dict]] = None,
+    used_pool_questions: Optional[list[str]] = None,
 ) -> dict:
     """
     Call the question-generation service and return the full JSON response.
     'category' is passed to the service when provided (skill-based questions).
+    'question_pool' is the recruiter-uploaded CSV; the service will pick from it
+    when supplied and only fall back to LLM generation if empty/missing for the
+    requested topic.
     """
     payload = {
         "resume_json": resume_json,
         "previous_qa": previous_qa,
         "difficulty": difficulty,
     }
-    # Only include category in the payload when it's explicitly provided
     if category is not None:
         payload["category"] = category
+    if question_pool:
+        payload["question_pool"] = question_pool
+        if used_pool_questions:
+            payload["used_pool_questions"] = used_pool_questions
 
     try:
         with httpx.Client(timeout=60.0) as client:
@@ -251,11 +378,19 @@ def _get_previous_qa_for_category(db: Session, interview_id, category: str) -> l
     return previous_qa
 
 
-def _get_required_skills(db: Session, interview_id) -> list[str]:
+def _get_topic_list(db: Session, interview_id, settings) -> list[str]:
     """
-    Fetch the required_skills for the job associated with this interview.
-    Path: interview → application → job → required_skills
+    Resolve the topic list for the interview loop.
+
+    Preference:
+      1. job_interview_settings.topics (when non-empty)
+      2. jobs.required_skills (legacy fallback)
     """
+    if settings is not None and settings.topics:
+        topics = [t for t in settings.topics if t]
+        if topics:
+            return topics
+
     interview = (
         db.query(InterviewModel)
         .filter(InterviewModel.id == interview_id)
@@ -263,7 +398,6 @@ def _get_required_skills(db: Session, interview_id) -> list[str]:
     )
     if not interview:
         return []
-
     application = (
         db.query(ApplicationModel)
         .filter(ApplicationModel.id == interview.application_id)
@@ -271,7 +405,6 @@ def _get_required_skills(db: Session, interview_id) -> list[str]:
     )
     if not application:
         return []
-
     job = (
         db.query(JobModel)
         .filter(JobModel.id == application.job_id)
@@ -279,22 +412,16 @@ def _get_required_skills(db: Session, interview_id) -> list[str]:
     )
     if not job or not job.required_skills:
         return []
+    return job.required_skills
 
-    return job.required_skills  # JSONB column, returns a Python list
 
-
-def _determine_next_category(db: Session, interview_id, required_skills: list[str]) -> tuple[str, bool]:
+def _determine_next_category(db: Session, interview_id, topics: list[str]) -> tuple[str, bool]:
     """
-    Determine which category (skill) to use for the next question.
+    Determine which topic to use for the next question.
 
     Returns (category, is_first_question_in_category).
-
-    Logic:
-    - Look at all questions asked so far, grouped by category.
-    - If the current category has < QUESTIONS_PER_CATEGORY questions → continue same category.
-    - Otherwise, move to the next skill in required_skills.
+    Iterates `topics` in order, asking QUESTIONS_PER_CATEGORY questions per topic.
     """
-    # Get all questions for this interview, ordered by sequence
     all_questions = (
         db.query(InterviewQuestionModel)
         .filter(InterviewQuestionModel.interview_id == interview_id)
@@ -302,7 +429,6 @@ def _determine_next_category(db: Session, interview_id, required_skills: list[st
         .all()
     )
 
-    # Count questions per category (excluding intro questions where category is None)
     category_counts: dict[str, int] = {}
     last_category = None
     for q in all_questions:
@@ -310,32 +436,24 @@ def _determine_next_category(db: Session, interview_id, required_skills: list[st
             category_counts[q.category] = category_counts.get(q.category, 0) + 1
             last_category = q.category
 
-    # If no skill-based questions yet, start with the first skill
     if last_category is None:
-        if required_skills:
-            return required_skills[0], True
+        if topics:
+            return topics[0], True
         return "general", True
 
-    # Check how many questions the last category has
     count_in_last = category_counts.get(last_category, 0)
-
     if count_in_last < QUESTIONS_PER_CATEGORY:
-        # Continue with the same category
         return last_category, False
 
-    # Need to switch to a new category
-    # Find current category's index in required_skills
     try:
-        current_index = required_skills.index(last_category)
+        current_index = topics.index(last_category)
         next_index = current_index + 1
     except ValueError:
         next_index = 0
 
-    if next_index < len(required_skills):
-        return required_skills[next_index], True
-    else:
-        # All skills exhausted — cycle back or use "general"
-        return "general", True
+    if next_index < len(topics):
+        return topics[next_index], True
+    return "general", True
 
 
 # =========================================================
@@ -419,15 +537,27 @@ def start_interview(
     # if not (window_start <= now <= window_end):
     #     raise HTTPException(status_code=400, detail="...")
 
-    # ── 3. Load resume JSON (hardcoded for now) ──────────────────────────
-    resume_json = _load_hardcoded_resume()
+    # ── 2b. Refuse if AI interview is disabled in settings ───────────────
+    settings = _get_settings_for_interview(db, interview.id)
+    if settings is not None and settings.ai_interview_enabled is False:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="AI interview is disabled for this job.",
+        )
+
+    # ── 3. Load resume JSON from the database ────────────────────────────
+    resume_json = _load_candidate_resume(db, interview.id)
 
     # ── 4. Generate the first question (INTRO: no prev_qa, no category) ──
+    difficulty = _resolve_difficulty(settings)
+    question_pool = _build_question_pool(settings)
     qg_data = _generate_question(
         resume_json,
-        previous_qa=[],  # No prev_qa for intro
-        difficulty="medium",
-        category=None,   # No category for intro
+        previous_qa=[],
+        difficulty=difficulty,
+        category=None,
+        question_pool=question_pool,
+        used_pool_questions=_used_pool_questions(db, interview.id),
     )
     question_text = qg_data["question"]
 
@@ -575,15 +705,17 @@ def evaluate_and_generate(
     db.add(new_response)
     db.flush()
 
-    # ── 6. Check if this was the last question (question limit reached) ──
+    # ── 6. Check question-count limits + early-termination on low scores ─
+    settings = _get_settings_for_interview(db, interview_id)
+    max_questions = _resolve_max_questions(settings)
+
     total_questions = (
         db.query(InterviewQuestionModel)
         .filter(InterviewQuestionModel.interview_id == interview_id)
         .count()
     )
 
-    if total_questions >= MAX_QUESTIONS:
-        # All questions have been answered — interview is complete
+    if total_questions >= max_questions:
         interview.status = "completed"
         application = db.query(ApplicationModel).filter(ApplicationModel.id == interview.application_id).first()
         if application:
@@ -599,26 +731,47 @@ def evaluate_and_generate(
             },
         )
 
-    # ── 7. Determine the next category and whether to pass prev_qa ───────
-    required_skills = _get_required_skills(db, interview_id)
+    # Early termination: only when not in fixed-count mode
+    if settings is not None and not settings.fixed_question_count:
+        streak = _consecutive_low_score_streak(db, interview_id)
+        if streak >= LOW_SCORE_STREAK_LIMIT:
+            interview.status = "completed"
+            application = db.query(ApplicationModel).filter(ApplicationModel.id == interview.application_id).first()
+            if application:
+                application.status = "INTERVIEW_COMPLETED"
+            db.commit()
+            return JSONResponse(
+                content={
+                    "is_interview_ended": True,
+                    "question_text": "",
+                    "question_sequence": total_questions,
+                    "interview_id": str(interview_id),
+                    "reason": f"Interview ended early after {LOW_SCORE_STREAK_LIMIT} consecutive low-scoring answers.",
+                },
+            )
+
+    # ── 7. Determine the next topic and whether to pass prev_qa ──────────
+    topics = _get_topic_list(db, interview_id, settings)
     next_category, is_first_in_category = _determine_next_category(
-        db, interview_id, required_skills
+        db, interview_id, topics
     )
 
-    # Build prev_qa: only pass it if we're continuing the SAME category
-    # (not the first question in a new category)
     if is_first_in_category:
-        previous_qa = []  # New category → fresh start, no prev_qa
+        previous_qa = []
     else:
         previous_qa = _get_previous_qa_for_category(db, interview_id, next_category)
 
     # ── 8. Generate next question ────────────────────────────────────────
-    resume_json = _load_hardcoded_resume()
+    resume_json = _load_candidate_resume(db, interview_id)
+    difficulty = _resolve_difficulty(settings)
+    question_pool = _build_question_pool(settings)
     qg_data = _generate_question(
         resume_json,
         previous_qa=previous_qa,
-        difficulty="medium",
+        difficulty=difficulty,
         category=next_category,
+        question_pool=question_pool,
+        used_pool_questions=_used_pool_questions(db, interview_id),
     )
     next_question_text = qg_data["question"]
     metadata = qg_data.get("metadata", {})

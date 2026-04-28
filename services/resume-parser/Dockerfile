@@ -24,7 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY --from=builder /install /usr/local
 
-COPY app/ .
+COPY app/ ./app/
 
 ENV GEMINI_API_KEY=""
 ENV MODEL_PATH="/app/models/qwen2.5-1.5b-instruct-q4_k_m.gguf"
@@ -32,4 +32,4 @@ ENV INFERENCE_BACKEND="gemini"
 
 ENV PORT=8006
 
-CMD uvicorn api:app --host 0.0.0.0 --port $PORT
+CMD uvicorn app.api:app --host 0.0.0.0 --port $PORT
