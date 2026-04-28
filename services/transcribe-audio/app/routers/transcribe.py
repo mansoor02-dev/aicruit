@@ -21,11 +21,11 @@ except Exception as e:
     GROQ_AVAILABLE = False
     GROQ_ERROR = e
 
-# Load Whisper SMALL once at startup (fallback)
+# Load Faster-Whisper SMALL once at startup (fallback)
 try:
-    # import whisper
-    # WHISPER_MODEL = whisper.load_model("small")
-    WHISPER_AVAILABLE = False
+    from faster_whisper import WhisperModel
+    WHISPER_MODEL = WhisperModel("small", device="cpu", compute_type="int8")
+    WHISPER_AVAILABLE = True
 except Exception as e:
     WHISPER_MODEL = None
     WHISPER_AVAILABLE = False
@@ -72,13 +72,15 @@ async def transcribe(file: UploadFile = File(...)):
                         detail=f"Groq transcription failed: {str(groq_error)}"
                     )
         
-        # Fallback to Whisper if Groq not available or failed
+        # Fallback to Faster-Whisper if Groq not available or failed
         if WHISPER_AVAILABLE:
-            result = WHISPER_MODEL.transcribe(save_path)
-            transcription = result.get("text", "")
+            segments, info = WHISPER_MODEL.transcribe(save_path)
+            transcription = " ".join([segment.text for segment in segments])
             return JSONResponse({
                 "transcription": transcription,
-                "model": "whisper-small"
+                "model": "faster-whisper-small",
+                "language": info.language,
+                "duration": info.duration
             })
 
     except Exception as e:

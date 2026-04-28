@@ -2,10 +2,14 @@
 Candidate feedback generation logic — uses LLM for personalised feedback.
 """
 
-from typing import Any, List
+import sys
+import json
+sys.path.insert(0, "/app")
+
+from typing import List
 
 from .models import ScoredEntry, CandidateReport
-from .llm_loader import call_llm_json
+from shared.llm_client import LLMClient
 
 
 _CANDIDATE_PROMPT = """You are a friendly career coach giving feedback to an interview candidate.
@@ -22,13 +26,11 @@ Rules:
 - Do NOT include any numeric scores in the feedback.
 - Tone must be warm and motivating.
 
-Return JSON only:
+Return JSON only with this exact structure:
 {{
   "strengths": ["...", "..."],
   "improvements": ["...", "..."]
-}}
-
-JSON:"""
+}}"""
 
 
 def _format_entries(entries: List[ScoredEntry]) -> str:
@@ -38,23 +40,35 @@ def _format_entries(entries: List[ScoredEntry]) -> str:
     return "\n".join(lines)
 
 
-def _parse_string_list(raw: Any) -> List[str]:
+def _parse_string_list(raw: any) -> List[str]:
     """Safely coerce the LLM output into a list of strings."""
     if isinstance(raw, list):
         return [str(item).strip() for item in raw if str(item).strip()]
     return []
 
 
-def build_candidate_report(llm: Any, entries: List[ScoredEntry]) -> CandidateReport:
+def build_candidate_report(llm_client: LLMClient, entries: List[ScoredEntry]) -> CandidateReport:
     """Ask the LLM for personalised candidate feedback."""
     prompt = _CANDIDATE_PROMPT.format(entries_text=_format_entries(entries))
-    result = call_llm_json(llm, prompt, max_tokens=400)
-
-    if result:
-        strengths = _parse_string_list(result.get("strengths", []))
-        improvements = _parse_string_list(result.get("improvements", []))
-        if strengths and improvements:
-            return CandidateReport(strengths=strengths[:3], improvements=improvements[:3])
+    
+    try:
+        result = llm_client.complete(
+            prompt=prompt,
+            system="You are a career coach. Respond with JSON only.",
+            max_tokens=400
+        )
+        
+        # Extract JSON from response
+        try:
+            parsed = json.loads(result.strip())
+            strengths = _parse_string_list(parsed.get("strengths", []))
+            improvements = _parse_string_list(parsed.get("improvements", []))
+            if strengths and improvements:
+                return CandidateReport(strengths=strengths[:3], improvements=improvements[:3])
+        except (json.JSONDecodeError, ValueError):
+            pass
+    except Exception:
+        pass
 
     # Fallback: derive basic feedback from remarks
     strengths: List[str] = []

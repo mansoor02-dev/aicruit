@@ -10,7 +10,7 @@ load_dotenv()
 class OpenRouterChat:
     """Wrapper for OpenRouter API (OpenAI-compatible)."""
 
-    def __init__(self, model_name: str = "arcee-ai/trinity-large-preview:free"):
+    def __init__(self, model_name: str = "openai/gpt-oss-120b:free"):
         api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:
             raise ValueError("OPENROUTER_API_KEY environment variable not set")
@@ -87,7 +87,7 @@ class GeminiChat:
 class LLMLoader:
     """Loads and caches an LLM callable (OpenRouter or Gemini)."""
 
-    def __init__(self, model_type: str = "gemini"):
+    def __init__(self, model_type: str = "openrouter"):
         self.model_type = model_type
         self._llm: Optional[Any] = None
 

@@ -89,8 +89,8 @@ export default function ApplicationDetails() {
   }, [application]);
 
   const handleStartInterview = () => {
-    // Open interview page in a new tab
-    window.open(`/candidate/interview/${application?.application_id}`, '_blank');
+    // Route through proctoring setup first, then to the interview page
+    window.open(`/candidate/proctoring-setup?applicationId=${application?.application_id}`, '_blank');
   };
 
   const getStatusBadge = (status: string) => {

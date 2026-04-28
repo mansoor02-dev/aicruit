@@ -134,6 +134,7 @@ CREATE TABLE IF NOT EXISTS interviews (
         CHECK (status IN ('scheduled','in_progress','completed','cancelled','expired')),
     
     cheating_risk_score INT DEFAULT 0,
+    next_snapshot_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -262,4 +263,17 @@ CREATE TABLE IF NOT EXISTS job_interview_settings (
     updated_at TIMESTAMP DEFAULT NOW(),
     CONSTRAINT job_interview_settings_difficulty_chk
         CHECK (difficulty_level IS NULL OR difficulty_level IN ('low','medium','high','very_high','varying'))
+);
+
+-- ============================
+-- 14. SNAPSHOTS (Proctoring)
+-- ============================
+CREATE TABLE IF NOT EXISTS snapshots (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    interview_id UUID REFERENCES interviews(id) ON DELETE CASCADE,
+    camera_url TEXT,
+    screen_url TEXT,
+    client_timestamp BIGINT,
+    server_timestamp BIGINT,
+    created_at TIMESTAMP DEFAULT NOW()
 );

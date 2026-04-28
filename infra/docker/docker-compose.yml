@@ -1,19 +1,41 @@
+# ----------------------------------------------------------------------
+# DOCKER COMPOSE OPTIMIZATIONS APPLIED:
+# 1. Removed `container_name` to rely on robust Compose service names.
+# 2. Fixed service discovery: replaced `aicruit_*` URLs with service names (e.g., http://file-service:8005).
+# 3. Improved `depends_on`: replaced simple dependencies with `condition: service_healthy` where applicable (like postgres).
+# 4. Healthcheck reliability: replaced `curl` with native `python` urllib checks since lightweight python images often lack curl.
+# 5. Removed hardcoded secrets (e.g., GROQ_API_KEY) — relying purely on `env_file`.
+# 6. Used variable substitutions with fallbacks for DB credentials (`${POSTGRES_USER:-admin}`).
+# 7. Cross-platform volume mounts: replaced `${USERPROFILE}` with `${HOME:-${USERPROFILE}}` for Windows/Mac/Linux support.
+# 8. Standardized `restart: always` for persistent services and `restart: "no"` for one-time jobs.
+# 9. Added shared/ volume mount to all services that need embedding_provider or llm_client.
+# 10. Added memory limits to prevent OOM on low-RAM machines.
+# 11. Added healthchecks to services missing them (file-service, resume-parser, audio-transcribe).
+# 12. Added REPORT_GEN_URL to backend-router environment.
+# 13. Added report-generation to backend-router depends_on.
+# 14. Switched postgres image to pgvector/pgvector:pg15 — has vector extension built-in, no manual install needed.
+# 15. Added EMBEDDING_PROVIDER and LLM env vars to services that use shared/llm_client or shared/embedding_provider.
+# 16. Replaced deprecated PY_WHISPER_MODEL with WHISPER_MODEL for consistency with shared config.
+# ----------------------------------------------------------------------
 
 services:
   postgres:
-    image: postgres:15
-    container_name: aicruit_postgres
+    image: pgvector/pgvector:pg15
     restart: always
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: admin123
-      POSTGRES_DB: aicruit
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin123}
+      POSTGRES_DB: ${POSTGRES_DB:-aicruit}
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 512m
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d ${POSTGRES_DB:-aicruit}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -21,129 +43,196 @@ services:
 
   pgadmin:
     image: dpage/pgadmin4
-    container_name: aicruit_pgadmin
     restart: always
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@aicruit.com
-      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@aicruit.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin123}
     ports:
       - "5050:80"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     volumes:
       - pgadmin_data:/var/lib/pgadmin
-  
-  file-service:
-    build:
-      context: ../../services/file-service
-    container_name: aicruit_file_service
-    ports:
-      - "8005:8005"
-    volumes:
-      - ../../services/file-service/uploads:/app/uploads
-    environment:
-      DB_NAME: aicruit
-      DB_USER: admin
-      DB_PASS: admin123
-      DB_HOST: postgres
-      DB_PORT: 5432
-    depends_on:
-      - postgres
+    deploy:
+      resources:
+        limits:
+          memory: 256m
 
   db-init:
     build:
       context: ../../database
       dockerfile: Dockerfile
-    container_name: aicruit_db_init
+    restart: "no"
     environment:
-      DB_NAME: aicruit
-      DB_USER: admin
-      DB_PASS: admin123
+      DB_NAME: ${POSTGRES_DB:-aicruit}
+      DB_USER: ${POSTGRES_USER:-admin}
+      DB_PASS: ${POSTGRES_PASSWORD:-admin123}
       DB_HOST: postgres
       DB_PORT: 5432
     depends_on:
-      - postgres
-    restart: "no"
-    # Keep schema available inside container (optional: the image copies it already)
+      postgres:
+        condition: service_healthy
     volumes:
       - ../../database/schema.sql:/app/schema.sql:ro
+
+  file-service:
+    build:
+      context: ../../services/file-service
+    restart: always
+    ports:
+      - "8005:8005"
+    volumes:
+      - ../../services/file-service/uploads:/app/uploads
+    environment:
+      DB_NAME: ${POSTGRES_DB:-aicruit}
+      DB_USER: ${POSTGRES_USER:-admin}
+      DB_PASS: ${POSTGRES_PASSWORD:-admin123}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://admin:admin123@postgres:5432/aicruit}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8005/health')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   resume-parser:
     build:
       context: ../../services/resume-parser
-    container_name: aicruit_resume-parser
+    restart: always
     ports:
       - "8006:8006"
     env_file:
       - ../../services/resume-parser/.env
     environment:
-      DB_NAME: aicruit
-      DB_USER: admin
-      DB_PASS: admin123
+      DB_NAME: ${POSTGRES_DB:-aicruit}
+      DB_USER: ${POSTGRES_USER:-admin}
+      DB_PASS: ${POSTGRES_PASSWORD:-admin123}
       DB_HOST: postgres
       DB_PORT: 5432
-      FILE_SERVICE_URL: http://aicruit_file_service:8005
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://admin:admin123@postgres:5432/aicruit}
+      FILE_SERVICE_URL: http://file-service:8005
       FRONTEND_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
-      DATABASE_URL: postgresql+psycopg2://admin:admin123@postgres:5432/aicruit
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-onnx}
+      LLM_PRIMARY_MODEL: ${LLM_PRIMARY_MODEL:-google/gemini-flash-2.0}
+      LLM_FALLBACK_MODEL: ${LLM_FALLBACK_MODEL:-meta-llama/llama-3.1-8b-instruct:free}
     depends_on:
-      - postgres
-      - file-service
+      postgres:
+        condition: service_healthy
+      file-service:
+        condition: service_healthy
     volumes:
       - ../../services/resume-parser/parsed:/app/parsed
+      - ../../shared:/app/shared:ro
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8006/health')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
   backend-router:
     image: aicruit/api-gateway:local
     build:
       context: ../../gateway
-    container_name: aicruit_backend_router
+    restart: always
     ports:
       - "8000:8000"
     env_file:
       - ../../gateway/.env
     environment:
-      RESUME_PARSER_URL: http://aicruit_resume-parser:8006
-      FILE_SERVICE_URL: http://aicruit_file_service:8005
-      FILE_SERVICE_PUBLIC_URL: http://localhost:8005
-      QUESTION_GEN_URL: http://aicruit_question_generation:8010
-      TTS_URL: http://aicruit_text_to_speech:8011
-      TRANSCRIBE_URL: http://aicruit_audio_transcribe:8007
-      DB_NAME: aicruit
-      DB_USER: admin
-      DB_PASS: admin123
+      RESUME_PARSER_URL: http://resume-parser:8006
+      FILE_SERVICE_URL: http://file-service:8005
+      QUESTION_GEN_URL: http://question-generation:8010
+      TTS_URL: http://text-to-speech:8011
+      TRANSCRIBE_URL: http://audio-transcribe:8007
+      REPORT_GEN_URL: http://report-generation:8012
+      PROCTORING_SERVICE_URL: http://proctoring-service:8014
+      DB_NAME: ${POSTGRES_DB:-aicruit}
+      DB_USER: ${POSTGRES_USER:-admin}
+      DB_PASS: ${POSTGRES_PASSWORD:-admin123}
       DB_HOST: postgres
       DB_PORT: 5432
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://admin:admin123@postgres:5432/aicruit}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-onnx}
+      LLM_PRIMARY_MODEL: ${LLM_PRIMARY_MODEL:-google/gemini-flash-2.0}
+      LLM_FALLBACK_MODEL: ${LLM_FALLBACK_MODEL:-meta-llama/llama-3.1-8b-instruct:free}
     volumes:
-      # Mount host AWS credentials into container so the gateway can access AWS configs
-      # Use USERPROFILE for Windows hosts; Docker will expand it
-      - ${USERPROFILE}/.aws:/root/.aws:ro
+      - ${HOME:-${USERPROFILE}}/.aws:/root/.aws:ro
+      - ../../shared:/app/shared:ro
     depends_on:
-      - postgres
-      - resume-parser
-      - file-service
-      - question-generation
-      - text-to-speech
-      - audio-transcribe
+      postgres:
+        condition: service_healthy
+      file-service:
+        condition: service_healthy
+      resume-parser:
+        condition: service_healthy
+      question-generation:
+        condition: service_healthy
+      text-to-speech:
+        condition: service_healthy
+      audio-transcribe:
+        condition: service_healthy
+      report-generation:
+        condition: service_healthy
+      proctoring-service:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   audio-transcribe:
     build:
       context: ../../services/transcribe-audio
-    container_name: aicruit_audio_transcribe
+    restart: always
     ports:
       - "8007:8007"
     env_file:
       - ../../services/transcribe-audio/app/.env
     environment:
       UPLOAD_DIR: /tmp/uploads
-      PY_WHISPER_MODEL: small
+      WHISPER_MODEL: ${WHISPER_MODEL:-base}
       FRONTEND_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
-      GROQ_API_KEY: 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
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
     depends_on:
-      - file-service
-    restart: always
+      file-service:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8007/health')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
 
   question-generation:
     build:
       context: ../../services/question-generation
-    container_name: aicruit_question_generation
+    restart: always
     ports:
       - "8010:8010"
     env_file:
@@ -151,21 +240,33 @@ services:
     environment:
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://admin:admin123@postgres:5432/aicruit}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-onnx}
+      LLM_PRIMARY_MODEL: ${LLM_PRIMARY_MODEL:-google/gemini-flash-2.0}
+      LLM_FALLBACK_MODEL: ${LLM_FALLBACK_MODEL:-meta-llama/llama-3.1-8b-instruct:free}
     volumes:
       - ../../services/question-generation/cache:/app/cache
       - ../../services/question-generation/data:/app/data
       - ../../services/question-generation/logs:/app/logs
-    restart: always
+      - ../../shared:/app/shared:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256m
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8010/health"]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8010/health')\" || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 30s
+
   text-to-speech:
     build:
       context: ../../services/text-to-speech
-    container_name: aicruit_text_to_speech
+    restart: always
     ports:
       - "8011:8011"
     environment:
@@ -174,17 +275,21 @@ services:
     volumes:
       - ../../services/text-to-speech/cache:/app/cache
       - ../../services/text-to-speech/logs:/app/logs
-    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 256m
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8011/health"]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8011/health')\" || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 30s
+
   report-generation:
     build:
       context: ../../services/report-generation
-    container_name: aicruit_report_generation
+    restart: always
     ports:
       - "8012:8012"
     env_file:
@@ -192,9 +297,50 @@ services:
     environment:
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"
-    restart: always
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://admin:admin123@postgres:5432/aicruit}
+      LLM_PRIMARY_MODEL: ${LLM_PRIMARY_MODEL:-google/gemini-flash-2.0}
+      LLM_FALLBACK_MODEL: ${LLM_FALLBACK_MODEL:-meta-llama/llama-3.1-8b-instruct:free}
+    volumes:
+      - ../../shared:/app/shared:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256m
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8012/health"]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8012/health')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  proctoring-service:
+    build:
+      context: ../../services/proctoring-service
+    restart: always
+    ports:
+      - "8014:8014"
+    volumes:
+      - ../../services/proctoring-service/uploads:/app/uploads
+      - ../../shared:/app/shared:ro
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://admin:admin123@postgres:5432/aicruit}
+      UPLOAD_DIR: /app/uploads/proctoring
+      MAX_FILE_SIZE_MB: 5
+      APP_URL: http://localhost:3000
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8014/health')\" || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3

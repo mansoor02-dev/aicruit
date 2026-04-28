@@ -1,6 +1,6 @@
-﻿from fastapi import FastAPI
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .routes import auth, job, interview, job_interview_settings
+from .routes import auth, job, interview, job_interview_settings, snapshot
 from dotenv import load_dotenv
 import os
 
@@ -23,3 +23,4 @@ app.include_router(auth.router)
 app.include_router(interview.router, prefix="/interview", tags=["Interview"])
 app.include_router(job.router, prefix="/job", tags=["Jobs"])
 app.include_router(job_interview_settings.router, prefix="/job", tags=["Job Interview Settings"])
+app.include_router(snapshot.router)
