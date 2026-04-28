@@ -25,6 +25,8 @@ import {
   User,
   Clock,
   PhoneOff,
+  Camera,
+  CameraOff,
 } from 'lucide-react';
 import { getAuthToken } from '@/lib/api';
 
@@ -35,7 +37,7 @@ const MAX_QUESTIONS = 10;
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type InterviewPhase = 'lobby' | 'interview' | 'finished';
-type LobbyStep = 'instructions' | 'permissions' | 'mictest' | 'ready';
+type LobbyStep = 'instructions' | 'permissions' | 'mictest' | 'camerasetup' | 'ready';
 
 interface QuestionData {
   interviewId: string;
@@ -60,6 +62,12 @@ export default function InterviewPage() {
   const [micLevel, setMicLevel] = useState(0);
   const [micTestPassed, setMicTestPassed] = useState(false);
 
+  // Camera state
+  const [cameraPermission, setCameraPermission] = useState<'pending' | 'granted' | 'denied'>('pending');
+  const [isCameraWorking, setIsCameraWorking] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
+
   // Interview state
   const [currentQuestion, setCurrentQuestion] = useState<QuestionData | null>(null);
   const [isLoadingQuestion, setIsLoadingQuestion] = useState(false);
@@ -76,6 +84,12 @@ export default function InterviewPage() {
   // Timer state
   const [timeRemaining, setTimeRemaining] = useState(QUESTION_TIMER_SECONDS);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Proctoring refs and state
+  const screenStreamRef = useRef<MediaStream | null>(null);
+  const [cameraPos, setCameraPos] = useState({ x: 20, y: 20 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStart = useRef({ x: 0, y: 0, camX: 0, camY: 0 });
 
   // Refs
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
@@ -236,6 +250,142 @@ export default function InterviewPage() {
     }
   }, []);
 
+  // ─── Camera Permission (lobby inline) ─────────────────────────────────
+
+  const requestCameraPermission = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      cameraStreamRef.current = stream;
+      setCameraPermission('granted');
+    } catch {
+      setCameraPermission('denied');
+    }
+  }, []);
+
+  // Attach camera stream to video element when on the camerasetup step
+  useEffect(() => {
+    if (lobbyStep === 'camerasetup' && cameraStreamRef.current && videoRef.current) {
+      const video = videoRef.current;
+      video.srcObject = cameraStreamRef.current;
+
+      const handlePlaying = () => {
+        setIsCameraWorking(true);
+      };
+
+      video.addEventListener('playing', handlePlaying);
+      video.play().catch(() => {
+        // Failed to play camera preview
+      });
+
+      return () => {
+        video.removeEventListener('playing', handlePlaying);
+      };
+    }
+  }, [lobbyStep]);
+
+  // Auto-skip camera step if coming from proctoring-setup page
+  useEffect(() => {
+    if (lobbyStep === 'camerasetup') {
+      const cameraReady = sessionStorage.getItem('proctoring_camera_ready');
+      if (cameraReady === 'true') {
+        setCameraPermission('granted');
+        setIsCameraWorking(true);
+        // Re-acquire camera stream for proctoring captures
+        navigator.mediaDevices.getUserMedia({ video: true }).then((stream) => {
+          cameraStreamRef.current = stream;
+        }).catch(() => {
+          // Camera may not be available, but we proceed since proctoring approved it
+        });
+        setLobbyStep('ready');
+      }
+    }
+  }, [lobbyStep]);
+
+  // ─── Proctoring Capture & Polling ─────────────────────────────────────
+
+  const takeAndUploadSnapshot = useCallback(async () => {
+     if (!cameraStreamRef.current || !screenStreamRef.current || !currentQuestion?.interviewId) return;
+     
+     const takeSnapshot = async (stream: MediaStream, width: number, height: number): Promise<string | null> => {
+       const track = stream.getVideoTracks()[0];
+       if (!track || track.readyState !== 'live') return null;
+       
+       const video = document.createElement('video');
+       video.srcObject = stream;
+       video.muted = true;
+       await video.play().catch(() => {});
+       
+       const canvas = document.createElement('canvas');
+       canvas.width = width;
+       canvas.height = height;
+       const ctx = canvas.getContext('2d');
+       if (!ctx) return null;
+       ctx.drawImage(video, 0, 0, width, height);
+       
+       video.pause();
+       video.srcObject = null;
+       
+       return canvas.toDataURL('image/png'); // Base64
+     };
+
+     const cameraBase64 = await takeSnapshot(cameraStreamRef.current, 320, 240);
+     const screenBase64 = await takeSnapshot(screenStreamRef.current, 1280, 720);
+
+     if (!cameraBase64 || !screenBase64) return;
+
+     try {
+       const token = getAuthToken();
+       await fetch(`${API_BASE_URL}/snapshot/`, {
+         method: 'POST',
+         headers: {
+           'Content-Type': 'application/json',
+           ...(token ? { Authorization: `Bearer ${token}` } : {})
+         },
+         body: JSON.stringify({
+           interview_id: currentQuestion.interviewId,
+           client_timestamp: Date.now(),
+           camera_image: cameraBase64,
+           screen_image: screenBase64
+         })
+       });
+     } catch (e) {
+       console.error('Snapshot upload error', e);
+     }
+  }, [currentQuestion?.interviewId]);
+
+  useEffect(() => {
+    if (phase !== 'interview' || !currentQuestion?.interviewId) return;
+
+    const poll = async () => {
+      try {
+        const token = getAuthToken();
+        const res = await fetch(`${API_BASE_URL}/interview/${currentQuestion.interviewId}/instructions`, {
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
+          }
+        });
+        
+        if (!res.ok) return;
+        
+        const data = await res.json();
+        
+        if (data.terminate) {
+          handleEndInterview('Interview terminated by proctoring system.');
+          return;
+        }
+
+        if (data.take_snapshot) {
+           takeAndUploadSnapshot();
+        }
+      } catch (e) {
+        console.error('Polling error', e);
+      }
+    };
+
+    const interval = setInterval(poll, 5000);
+    return () => clearInterval(interval);
+  }, [phase, currentQuestion?.interviewId, handleEndInterview, takeAndUploadSnapshot]);
+
   // ─── Play Question Audio (auto-play) ──────────────────────────────────
 
   const playQuestionAudio = useCallback(
@@ -280,6 +430,17 @@ export default function InterviewPage() {
     setError(null);
 
     try {
+      if (!screenStreamRef.current) {
+        try {
+          const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+          screenStreamRef.current = screenStream;
+        } catch (e) {
+          setError('Screen sharing is required for proctoring.');
+          setIsLoadingQuestion(false);
+          return;
+        }
+      }
+
       const token = getAuthToken();
       const response = await fetch(`${API_BASE_URL}/interview/start`, {
         method: 'POST',
@@ -453,20 +614,30 @@ export default function InterviewPage() {
       if (audioStreamRef.current) {
         audioStreamRef.current.getTracks().forEach((t) => t.stop());
       }
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach((t) => t.stop());
+      }
+      if (screenStreamRef.current) {
+        screenStreamRef.current.getTracks().forEach((t) => t.stop());
+      }
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
       if (audioPlayerRef.current) {
         audioPlayerRef.current.pause();
       }
+
       stopTimer();
+      // Clean up sessionStorage proctoring flags
+      sessionStorage.removeItem('proctoring_camera_ready');
+      sessionStorage.removeItem('proctoring_app_id');
     };
   }, [stopTimer]);
 
   // ─── Lobby Render ─────────────────────────────────────────────────────
 
   const renderLobby = () => {
-    const steps: LobbyStep[] = ['instructions', 'permissions', 'mictest', 'ready'];
+    const steps: LobbyStep[] = ['instructions', 'permissions', 'mictest', 'camerasetup', 'ready'];
     const currentStepIndex = steps.indexOf(lobbyStep);
 
     return (
@@ -689,8 +860,96 @@ export default function InterviewPage() {
                 <Button
                   className="w-full"
                   size="lg"
-                  onClick={() => setLobbyStep('ready')}
+                  onClick={() => setLobbyStep('camerasetup')}
                   disabled={!micTestPassed}
+                >
+                  Continue
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {lobbyStep === 'camerasetup' && (
+            <Card className="bg-card border-border">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Camera className="w-5 h-5 text-primary" />
+                  Camera Setup
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-muted-foreground">
+                  We need access to your camera for proctoring during the interview.
+                </p>
+
+                {cameraPermission === 'pending' && (
+                  <div className="text-center space-y-4">
+                    <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+                      <Camera className="w-10 h-10 text-primary" />
+                    </div>
+                    <Button size="lg" onClick={requestCameraPermission}>
+                      Allow Camera Access
+                    </Button>
+                  </div>
+                )}
+
+                {cameraPermission === 'granted' && !isCameraWorking && (
+                  <div className="space-y-4">
+                    <div className="relative rounded-lg overflow-hidden bg-black/90 aspect-video max-w-md mx-auto border border-border">
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        muted
+                        playsInline
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Loader2 className="w-8 h-8 text-white animate-spin" />
+                      </div>
+                    </div>
+                    <p className="text-sm text-muted-foreground text-center">Starting camera preview...</p>
+                  </div>
+                )}
+
+                {cameraPermission === 'granted' && isCameraWorking && (
+                  <div className="space-y-4">
+                    <div className="relative rounded-lg overflow-hidden bg-black/90 aspect-video max-w-md mx-auto border border-border">
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        muted
+                        playsInline
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+                      <CheckCircle2 className="w-5 h-5 text-green-500" />
+                      <p className="text-green-500 font-medium">Camera is working correctly!</p>
+                    </div>
+                  </div>
+                )}
+
+                {cameraPermission === 'denied' && (
+                  <div className="text-center space-y-4">
+                    <div className="w-20 h-20 rounded-full bg-red-500/10 flex items-center justify-center mx-auto">
+                      <CameraOff className="w-10 h-10 text-red-500" />
+                    </div>
+                    <p className="text-red-500 font-medium">Camera access denied</p>
+                    <p className="text-sm text-muted-foreground">
+                      Please allow camera access in your browser settings and try again.
+                    </p>
+                    <Button variant="outline" onClick={requestCameraPermission}>
+                      Try Again
+                    </Button>
+                  </div>
+                )}
+
+                <Button
+                  className="w-full"
+                  size="lg"
+                  onClick={() => setLobbyStep('ready')}
+                  disabled={!isCameraWorking}
                 >
                   Continue
                   <ArrowRight className="w-4 h-4 ml-2" />
@@ -720,6 +979,10 @@ export default function InterviewPage() {
                   <div className="flex items-center gap-2 text-sm">
                     <CheckCircle2 className="w-4 h-4 text-green-500" />
                     <span>Microphone tested and working</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <CheckCircle2 className="w-4 h-4 text-green-500" />
+                    <span>Camera set up for proctoring</span>
                   </div>
                 </div>
 
@@ -773,6 +1036,54 @@ export default function InterviewPage() {
 
     return (
       <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 flex flex-col items-center justify-between p-4 relative overflow-hidden">
+        {/* Draggable Camera Window */}
+        <div
+          style={{
+            position: 'absolute',
+            left: `${cameraPos.x}px`,
+            top: `${cameraPos.y}px`,
+            zIndex: 50,
+            cursor: isDragging ? 'grabbing' : 'grab',
+            touchAction: 'none'
+          }}
+          onPointerDown={(e) => {
+            setIsDragging(true);
+            dragStart.current = {
+              x: e.clientX,
+              y: e.clientY,
+              camX: cameraPos.x,
+              camY: cameraPos.y
+            };
+            (e.target as HTMLElement).setPointerCapture(e.pointerId);
+          }}
+          onPointerMove={(e) => {
+            if (!isDragging) return;
+            const dx = e.clientX - dragStart.current.x;
+            const dy = e.clientY - dragStart.current.y;
+            setCameraPos({
+              x: dragStart.current.camX + dx,
+              y: dragStart.current.camY + dy
+            });
+          }}
+          onPointerUp={(e) => {
+            setIsDragging(false);
+            (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+          }}
+          className="w-48 aspect-video bg-black rounded-lg overflow-hidden border-2 border-slate-700 shadow-xl shadow-black/50"
+        >
+          <video
+            ref={(el) => {
+              if (el && cameraStreamRef.current) {
+                el.srcObject = cameraStreamRef.current;
+              }
+            }}
+            autoPlay
+            muted
+            playsInline
+            className="w-full h-full object-cover pointer-events-none"
+          />
+        </div>
+
         {/* Subtle grid background */}
         <div
           className="absolute inset-0 opacity-5"

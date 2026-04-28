@@ -1,11 +1,14 @@
 import json
 import re
+import sys
 from typing import Dict, Optional, Tuple
+
+sys.path.insert(0, "/app")
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from pipelines.llm_loader import LLMLoader
+from shared.llm_client import LLMClient
 
 
 # ---------------------------------------------------------------------------

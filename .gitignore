@@ -6,3 +6,6 @@ __pycache__/
 *.env.local
 .env.*.local
 .next/
+AGENTS.md
+directory_tree.md
+script.txt

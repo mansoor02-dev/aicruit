@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .routes import auth, job, interview
+from .routes import auth, job, interview, proctoring
 from dotenv import load_dotenv
 import os
 
@@ -22,3 +22,4 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(interview.router, prefix="/interview", tags=["Interview"])
 app.include_router(job.router, prefix="/job", tags=["Jobs"])
+app.include_router(proctoring.router)

@@ -13,10 +13,12 @@ from pydantic import BaseModel
 
 
 import sys
+sys.path.insert(0, "/app")
 sys.path.append(str(Path(__file__).parent.parent))
 
+from shared.llm_client import LLMClient
+from shared.embedding_provider import get_provider
 from pipelines.answer_evaluator import AnswerEvaluator
-from pipelines.llm_loader import LLMLoader, get_embedder
 from pipelines.orchestrator import InterviewOrchestrator
 from pipelines.question_generator import QuestionGenerator
 
@@ -36,19 +38,16 @@ async def lifespan(app: FastAPI):
 
     logger.info("Initialising interview service…")
 
-    llm = LLMLoader(model_type="openrouter").get_llm()
-    logger.info("LLM loaded")
-
-    embedder = get_embedder()
-    logger.info("Embedder loaded (cached)")
+    # LLM and embedder are now lazy-loaded from shared/ on first use
+    logger.info("Shared LLM and embedding providers configured")
 
     dataset_path = Path("data/software_questions.csv")
     with open(dataset_path, newline="", encoding="latin1") as f:
         dataset = list(csv.DictReader(f))
     logger.info(f"Dataset loaded: {len(dataset)} questions")
 
-    evaluator = AnswerEvaluator(embedder=embedder, model_type="openrouter")
-    question_generator = QuestionGenerator(dataset_questions=dataset, model_type="openrouter")
+    evaluator = AnswerEvaluator(embedder=get_provider())
+    question_generator = QuestionGenerator(dataset_questions=dataset)
 
     orchestrator = InterviewOrchestrator(
         evaluator=evaluator,

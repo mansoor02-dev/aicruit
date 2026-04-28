@@ -1,9 +1,12 @@
 import json
 import random
 import re
+import sys
 from typing import Dict, List, Optional, Tuple
 
-from pipelines.llm_loader import LLMLoader
+sys.path.insert(0, "/app")
+
+from shared.llm_client import LLMClient
 
 _FOLLOWUP_ANGLE_MAP = {
     "deep_dive": "implementation_details",

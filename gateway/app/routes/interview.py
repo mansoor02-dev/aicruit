@@ -448,7 +448,9 @@ def start_interview(
     db.add(new_question)
 
     # Update interview status
+    import random
     interview.status = "in_progress"
+    interview.next_snapshot_at = datetime.now(timezone.utc) + timedelta(seconds=random.randint(1, 30))
 
     db.commit()
     db.refresh(new_question)
@@ -769,6 +771,43 @@ def end_interview(
     db.commit()
 
     return {"message": "Interview ended successfully.", "interview_id": str(interview_id)}
+
+# =========================================================
+# GET INTERVIEW INSTRUCTIONS (Frontend Polling)
+# =========================================================
+@router.get("/{interview_id}/instructions", status_code=status.HTTP_200_OK)
+def get_interview_instructions(
+    interview_id: UUID,
+    db: Session = Depends(get_db_session),
+    current_user: UserModel = Depends(get_current_user),
+):
+    interview = db.query(InterviewModel).filter(InterviewModel.id == interview_id).first()
+    if not interview:
+        raise HTTPException(status_code=404, detail="Interview not found")
+
+    if interview.status != "in_progress":
+        return {
+            "status": interview.status,
+            "terminate": True,
+            "take_snapshot": False
+        }
+
+    now = datetime.now(timezone.utc)
+    snapshot_time = interview.next_snapshot_at
+    if snapshot_time and snapshot_time.tzinfo is None:
+        snapshot_time = snapshot_time.replace(tzinfo=timezone.utc)
+    
+    if snapshot_time and now >= snapshot_time:
+        return {
+            "status": "in_progress",
+            "take_snapshot": True
+        }
+    else:
+        return {
+            "status": "in_progress",
+            "take_snapshot": False
+        }
+
 
 # =========================================================
 # GET INTERVIEW DETAILS (RECRUITER/ADMIN ONLY)

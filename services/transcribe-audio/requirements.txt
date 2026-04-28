@@ -3,8 +3,7 @@ uvicorn[standard]
 gunicorn
 python-multipart
 aiofiles
-# Use OpenAI's official Whisper implementation to ensure `load_model` is present
-# git+https://github.com/openai/whisper.git@main
+faster-whisper
 soundfile
 python-dotenv
 groq

@@ -3,11 +3,16 @@ Aggregation logic — works on ScoredEntry list (already scored 0–10).
 Also handles LLM-based scoring of raw entries.
 """
 
-from typing import Any, Dict, List, Tuple
+import sys
+sys.path.insert(0, "/app")
+
+from typing import Dict, List, Tuple
+import json
+from pydantic import BaseModel
 
 from .models import QuestionEntry, ScoredEntry
-from .llm_loader import call_llm_json
 from .utils import clamp, scale_to_ten
+from shared.llm_client import LLMClient
 
 
 # ── LLM-based scoring ───────────────────────────────────────────────────────
@@ -29,12 +34,15 @@ Scoring guide:
   2 = mostly incorrect, major gaps
   3 = partially correct, some gaps
   4 = mostly correct, minor gaps
-  5 = excellent, thorough answer
-
-JSON:"""
+  5 = excellent, thorough answer"""
 
 
-def score_entry_with_llm(llm: Any, entry: QuestionEntry) -> ScoredEntry:
+class ScoreResult(BaseModel):
+    score: int
+    remark: str
+
+
+def score_entry_with_llm(llm_client: LLMClient, entry: QuestionEntry) -> ScoredEntry:
     """Score a single Q&A pair using the LLM. Falls back to the provided
     ai_score / remarks if the LLM call fails or if they were already supplied."""
 
@@ -50,12 +58,23 @@ def score_entry_with_llm(llm: Any, entry: QuestionEntry) -> ScoredEntry:
 
     # Ask the LLM
     prompt = _SCORE_PROMPT.format(question=entry.q[:400], answer=entry.a[:600])
-    result = call_llm_json(llm, prompt, max_tokens=150)
-
-    if result:
-        raw_score = float(result.get("score", 3))
-        remark = str(result.get("remark", "No remark."))[:250]
-    else:
+    
+    try:
+        result = llm_client.complete(
+            prompt=prompt,
+            system="You are a technical interview evaluator. Respond with JSON only.",
+            max_tokens=150
+        )
+        
+        # Extract JSON from response
+        try:
+            parsed = json.loads(result.strip())
+            raw_score = float(parsed.get("score", 3))
+            remark = str(parsed.get("remark", "No remark."))[:250]
+        except (json.JSONDecodeError, ValueError):
+            raw_score = 3.0
+            remark = "Unable to parse LLM response"
+    except Exception:
         # Fallback: use provided values or sensible defaults
         raw_score = float(entry.ai_score) if entry.ai_score is not None else 3.0
         remark = entry.remarks if entry.remarks else "LLM unavailable — default evaluation."
@@ -69,9 +88,9 @@ def score_entry_with_llm(llm: Any, entry: QuestionEntry) -> ScoredEntry:
     )
 
 
-def score_all_entries(llm: Any, entries: List[QuestionEntry]) -> List[ScoredEntry]:
+def score_all_entries(llm_client: LLMClient, entries: List[QuestionEntry]) -> List[ScoredEntry]:
     """Score every entry (via LLM when needed)."""
-    return [score_entry_with_llm(llm, e) for e in entries]
+    return [score_entry_with_llm(llm_client, e) for e in entries]
 
 
 # ── Aggregation ──────────────────────────────────────────────────────────────
