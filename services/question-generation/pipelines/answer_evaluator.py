@@ -1,4 +1,4 @@
-import json
+﻿import json
 import re
 import sys
 from typing import Dict, Optional, Tuple
@@ -6,13 +6,14 @@ from typing import Dict, Optional, Tuple
 sys.path.insert(0, "/app")
 
 import numpy as np
-from sentence_transformers import SentenceTransformer
+from pipelines.llm_loader import GeminiEmbedder
 
 from shared.llm_client import LLMClient
+from pipelines.llm_loader import LLMLoader
 
 
 # ---------------------------------------------------------------------------
-# "I don't know" detection — short-circuit before any LLM / embedding call
+# "I don't know" detection â€” short-circuit before any LLM / embedding call
 # ---------------------------------------------------------------------------
 _DONT_KNOW_RE = re.compile(
     r"\b("
@@ -38,12 +39,12 @@ _DONT_KNOW_EVAL: Dict = {
     "confidence": 1.0,
     "feedback": "Candidate is not familiar with this topic.",
     "answer_length": 0,
-    "needs_followup": False,   # No follow-up — just move on
+    "needs_followup": False,   # No follow-up â€” just move on
 }
 
 _DONT_KNOW_FLOW: Dict = {
     "decision": "new_topic",
-    "remarks": "Candidate is not familiar with this topic — moving on.",
+    "remarks": "Candidate is not familiar with this topic â€” moving on.",
     "score_value": 0.0,
     "score_reason": "Explicit unfamiliarity stated",
 }
@@ -64,7 +65,7 @@ class AnswerEvaluator:
     Evaluates candidate answers.
 
     Key design decisions for speed:
-    - "I don't know" answers are caught instantly by regex — zero LLM/embedding cost.
+    - "I don't know" answers are caught instantly by regex â€” zero LLM/embedding cost.
     - evaluate_combined() merges the scoring + flow-decision into ONE LLM call,
       cutting latency roughly in half compared to calling evaluate() and
       evaluate_for_flow_decision() separately.
@@ -74,7 +75,7 @@ class AnswerEvaluator:
 
     def __init__(
         self,
-        embedder: SentenceTransformer,
+        embedder: GeminiEmbedder,
         model_type: str = "openrouter",
         pass_threshold: float = PASS_THRESHOLD,
     ):
@@ -118,7 +119,7 @@ class AnswerEvaluator:
         if not user_answer or len(user_answer.strip()) < 3:
             return {
                 "decision": "same_topic",
-                "remarks": "Answer too brief — follow-up needed",
+                "remarks": "Answer too brief â€” follow-up needed",
                 "score_value": 0.1,
                 "score_reason": "Empty or minimal answer",
             }
@@ -170,7 +171,7 @@ class AnswerEvaluator:
 
         answer_length = len(user_answer.split())
 
-        # Very short but not "don't know" — skip LLM
+        # Very short but not "don't know" â€” skip LLM
         if answer_length < 5:
             ev = {
                 "pass": False, "depth_score": 0.2, "confidence": 0.9,
@@ -353,7 +354,7 @@ class AnswerEvaluator:
         is_followup: bool,
     ) -> Optional[Dict]:
         """
-        Single LLM call → score + feedback + flow decision.
+        Single LLM call â†’ score + feedback + flow decision.
         Replaces the two separate LLM calls used previously.
         """
         ref_line = (

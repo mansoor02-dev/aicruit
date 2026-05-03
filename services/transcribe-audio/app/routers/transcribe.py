@@ -1,4 +1,4 @@
-import os
+﻿import os
 import shutil
 import time
 from fastapi import APIRouter, UploadFile, File, HTTPException
@@ -16,28 +16,19 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 try:
     GROQ_CLIENT = Groq(api_key=os.getenv("GROQ_API_KEY"))
     GROQ_AVAILABLE = True
+    GROQ_ERROR = None
 except Exception as e:
     GROQ_CLIENT = None
     GROQ_AVAILABLE = False
     GROQ_ERROR = e
 
-# Load Faster-Whisper SMALL once at startup (fallback)
-try:
-    from faster_whisper import WhisperModel
-    WHISPER_MODEL = WhisperModel("small", device="cpu", compute_type="int8")
-    WHISPER_AVAILABLE = True
-except Exception as e:
-    WHISPER_MODEL = None
-    WHISPER_AVAILABLE = False
-    WHISPER_ERROR = e
-
 
 @router.post("/transcribe")
 async def transcribe(file: UploadFile = File(...)):
-    if not GROQ_AVAILABLE and not WHISPER_AVAILABLE:
+    if not GROQ_AVAILABLE:
         raise HTTPException(
             status_code=500,
-            detail="No transcription service available. Both Groq and Whisper failed to initialize."
+            detail=f"Groq transcription service unavailable: {GROQ_ERROR}"
         )
 
     try:
@@ -48,40 +39,26 @@ async def transcribe(file: UploadFile = File(...)):
         with open(save_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        # Try Groq API first
-        if GROQ_AVAILABLE:
-            try:
-                with open(save_path, "rb") as audio_file:
-                    transcription = GROQ_CLIENT.audio.transcriptions.create(
-                        file=(filename, audio_file.read()),
-                        model="whisper-large-v3",
-                        temperature=0,
-                        response_format="verbose_json",
-                    )
-                    return JSONResponse({
-                        "transcription": transcription.text,
-                        "model": "groq-whisper-large-v3"
-                    })
-            except Exception as groq_error:
-                # If Groq fails and Whisper is available, fallback to Whisper
-                if WHISPER_AVAILABLE:
-                    print(f"Groq transcription failed: {groq_error}. Falling back to Whisper.")
-                else:
-                    raise HTTPException(
-                        status_code=500,
-                        detail=f"Groq transcription failed: {str(groq_error)}"
-                    )
-        
-        # Fallback to Faster-Whisper if Groq not available or failed
-        if WHISPER_AVAILABLE:
-            segments, info = WHISPER_MODEL.transcribe(save_path)
-            transcription = " ".join([segment.text for segment in segments])
-            return JSONResponse({
-                "transcription": transcription,
-                "model": "faster-whisper-small",
-                "language": info.language,
-                "duration": info.duration
-            })
+        # Groq Whisper API
+        try:
+            with open(save_path, "rb") as audio_file:
+                transcription = GROQ_CLIENT.audio.transcriptions.create(
+                    file=(filename, audio_file.read()),
+                    model="whisper-large-v3",
+                    temperature=0,
+                    response_format="verbose_json",
+                )
+                return JSONResponse({
+                    "transcription": transcription.text,
+                    "model": "groq-whisper-large-v3"
+                })
+        except Exception as groq_error:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Groq transcription failed: {str(groq_error)}"
+            )
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 import { CandidateLayout } from '@/components/layout/CandidateLayout';
@@ -74,11 +74,11 @@ export default function Applications() {
       case 'APPLIED':
         return <Badge variant="outline">Applied</Badge>;
       case 'SCREENING':
-        return <Badge className="bg-blue-500/20 text-blue-500 border-blue-500/30">Under Review</Badge>;
+        return <Badge className="bg-primary/15 text-primary border-primary/25">Under Review</Badge>;
       case 'INTERVIEW_SCHEDULED':
-        return <Badge className="bg-yellow-500/20 text-yellow-500 border-yellow-500/30">Interview Scheduled</Badge>;
+        return <Badge className="bg-warning/20 text-warning-foreground border-warning/30">Interview Scheduled</Badge>;
       case 'OFFERED':
-        return <Badge className="bg-green-500/20 text-green-500 border-green-500/30">Offered</Badge>;
+        return <Badge className="bg-success/15 text-success border-success/25">Offered</Badge>;
       case 'REJECTED':
         return <Badge variant="destructive">Not Selected</Badge>;
       default:
@@ -91,8 +91,8 @@ export default function Applications() {
       <div className="min-h-screen bg-background p-4">
         <div className="space-y-6">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">My Applications</h1>
-            <p className="text-muted-foreground">Track the status of your job applications</p>
+            <h1 className="text-3xl font-extrabold tracking-tight text-foreground">My Applications</h1>
+            <p className="text-muted-foreground mt-1">Track the status of your job applications</p>
           </div>
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-6 h-6 animate-spin" />
@@ -107,8 +107,8 @@ export default function Applications() {
     <CandidateLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">My Applications</h1>
-          <p className="text-muted-foreground">Track the status of your job applications</p>
+          <h1 className="text-3xl font-extrabold tracking-tight text-foreground">My Applications</h1>
+          <p className="text-muted-foreground mt-1">Track the status of your job applications</p>
         </div>
 
         {loading ? (
@@ -118,7 +118,7 @@ export default function Applications() {
           </div>
         ) : applications.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-muted-foreground mb-4">You haven't applied to any jobs yet</p>
+            <p className="text-muted-foreground mb-4">You haven&apos;t applied to any jobs yet</p>
             <Button asChild>
               <Link href="/candidate/job">Browse Jobs</Link>
             </Button>

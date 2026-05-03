@@ -21,3 +21,7 @@ app.include_router(transcribe_router)
 @app.get("/")
 def root():
     return {"status": "ok", "service": "transcribe-audio"}
+
+@app.get("/health", tags=["health"])
+def _health():
+    return {"status": "ok"}

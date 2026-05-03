@@ -1,8 +1,7 @@
-pymupdf
+﻿pymupdf
 python-docx
 pytesseract
 Pillow
-llama-cpp-python
 pydantic
 google-genai
 fastapi

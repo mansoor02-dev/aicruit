@@ -1,9 +1,5 @@
-# ── TTS provider (Piper TTS) ─────────────────────────────────────
-piper-tts
-
-# ── REST API ─────────────────────────────────────────────────────
 fastapi
 uvicorn[standard]
 gunicorn
-pydantic
+google-cloud-texttospeech
 python-dotenv

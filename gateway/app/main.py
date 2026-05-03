@@ -14,7 +14,7 @@ app.add_middleware(
 	CORSMiddleware,
 	allow_origins=FRONTEND_ORIGINS if FRONTEND_ORIGINS != [''] else ["*"],
 	allow_credentials=True,
-	allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+	allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
 	allow_headers=["*"],
 )
 
@@ -24,3 +24,7 @@ app.include_router(interview.router, prefix="/interview", tags=["Interview"])
 app.include_router(job.router, prefix="/job", tags=["Jobs"])
 app.include_router(job_interview_settings.router, prefix="/job", tags=["Job Interview Settings"])
 app.include_router(snapshot.router)
+
+@app.get("/health", tags=["health"])
+def _health():
+    return {"status": "ok"}

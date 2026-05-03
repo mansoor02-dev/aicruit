@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import { RecruiterLayout } from "@/components/layout/RecruiterLayout";
@@ -287,7 +287,7 @@ export default function Jobs() {
   const getStatusBadge = (status: Job["status"]) => {
     switch (status) {
       case "Open":
-        return <Badge className="bg-green-500/20 text-green-500 border-green-500/30">Open</Badge>;
+        return <Badge className="bg-success/15 text-success border-success/25">Open</Badge>;
       case "Closed":
         return <Badge variant="secondary">Closed</Badge>;
       case "Draft":
@@ -301,8 +301,8 @@ export default function Jobs() {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-foreground">Jobs Management</h1>
-              <p className="text-muted-foreground">Create and manage your job postings</p>
+              <h1 className="text-3xl font-extrabold tracking-tight text-foreground">Jobs Management</h1>
+              <p className="text-muted-foreground mt-1">Create and manage your job postings</p>
             </div>
           </div>
           <div className="flex items-center justify-center py-8"><Loader2 className="w-6 h-6 animate-spin" /></div>
@@ -316,8 +316,8 @@ export default function Jobs() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Jobs Management</h1>
-            <p className="text-muted-foreground">Create and manage your job postings</p>
+            <h1 className="text-3xl font-extrabold tracking-tight text-foreground">Jobs Management</h1>
+            <p className="text-muted-foreground mt-1">Create and manage your job postings</p>
           </div>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
@@ -644,7 +644,7 @@ function SectionHeader({ icon, title, optional, noMargin }: {
 }) {
   return (
     <div className={"flex items-center gap-2 " + (noMargin ? "" : "mb-4")}>
-      <div className="p-1.5 rounded-md bg-primary/10 text-primary">{icon}</div>
+      <div className="p-1.5 rounded-md bg-accent text-accent-foreground">{icon}</div>
       <h3 className="font-semibold text-foreground">{title}</h3>
       {optional && <span className="text-xs text-muted-foreground">(optional)</span>}
     </div>

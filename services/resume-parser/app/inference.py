@@ -1,10 +1,8 @@
-from llama_cpp import Llama
-from google import genai
+﻿from google import genai
 import os
 from dotenv import load_dotenv
-load_dotenv() 
+load_dotenv()
 
-MODEL_PATH = os.getenv("MODEL_PATH", "models/qwen2.5-1.5b-instruct-q4_k_m.gguf")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = "gemini-2.5-flash"
 
@@ -24,23 +22,7 @@ Return this exact JSON structure filled with data from the resume:
   "languages": []
 }"""
 
-_llm = None
 _gemini_client = None
-
-
-def _get_local_model() -> Llama:
-    global _llm
-    if _llm is None:
-        _llm = Llama(
-            model_path=MODEL_PATH,
-            n_ctx=4096,
-            n_threads=6,
-            n_gpu_layers=0,
-            use_mmap=True,
-            verbose=False,
-            chat_format="chatml"
-        )
-    return _llm
 
 
 def _get_gemini_client():
@@ -50,20 +32,6 @@ def _get_gemini_client():
             raise ValueError("GEMINI_API_KEY not set in environment.")
         _gemini_client = genai.Client(api_key=GEMINI_API_KEY)
     return _gemini_client
-
-
-def _run_local(text: str) -> str:
-    llm = _get_local_model()
-    response = llm.create_chat_completion(
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": f"Parse this resume and return filled JSON:\n\n{text}"}
-        ],
-        max_tokens=1500,
-        temperature=0.1,
-        response_format={"type": "json_object"}
-    )
-    return response["choices"][0]["message"]["content"].strip()
 
 
 def _run_gemini(text: str) -> str:
@@ -80,7 +48,23 @@ def _run_gemini(text: str) -> str:
     return response.text.strip()
 
 
-def run_inference(text: str, backend: str | None = "gemini") -> str:
-    if backend == "local":
-        return _run_local(text)
+def run_inference(text: str) -> str:
     return _run_gemini(text)
+
+
+def run_score_inference(system_prompt: str, user_payload: str) -> dict:
+    """Call Gemini 2.5 Flash with a custom system prompt and JSON-mode user payload.
+    Returns the parsed JSON dict. Raises on transport / JSON errors.
+    """
+    import json as _json
+    client = _get_gemini_client()
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=user_payload,
+        config={
+            "system_instruction": system_prompt,
+            "response_mime_type": "application/json",
+            "temperature": 0.1,
+        },
+    )
+    return _json.loads(response.text)

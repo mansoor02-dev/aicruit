@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 import { CandidateLayout } from '@/components/layout/CandidateLayout';
@@ -151,8 +151,8 @@ export default function CandidateJobs() {
       <div className="min-h-screen bg-background p-4">
         <div className="space-y-6">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Browse Jobs</h1>
-            <p className="text-muted-foreground">Find your next opportunity</p>
+            <h1 className="text-3xl font-extrabold tracking-tight text-foreground">Browse Jobs</h1>
+            <p className="text-muted-foreground mt-1">Find your next opportunity</p>
           </div>
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-6 h-6 animate-spin" />
@@ -167,8 +167,8 @@ export default function CandidateJobs() {
     <CandidateLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Browse Jobs</h1>
-          <p className="text-muted-foreground">Find your next opportunity</p>
+          <h1 className="text-3xl font-extrabold tracking-tight text-foreground">Browse Jobs</h1>
+          <p className="text-muted-foreground mt-1">Find your next opportunity</p>
         </div>
 
         {/* Filters */}
@@ -244,7 +244,7 @@ export default function CandidateJobs() {
             })
           ) : filteredJobs.length === 0 ? (
             <div className="col-span-full text-center py-12">
-              <p className="text-muted-foreground">No jobs found matching your criteria</p>
+              <p className="text-muted-foreground mt-1">No jobs found matching your criteria</p>
             </div>
           ) : (
             filteredJobs.map((job) => {
@@ -259,7 +259,7 @@ export default function CandidateJobs() {
                     </div>
                     <div className="pt-3">
                       <h3 className="text-lg font-semibold text-foreground">{job.title}</h3>
-                      <p className="text-muted-foreground">{job.company}</p>
+                      <p className="text-muted-foreground mt-1">{job.company}</p>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3">

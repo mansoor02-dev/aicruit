@@ -46,15 +46,15 @@ async def generate_report(request: ReportRequest) -> ReportResponse:
     try:
         # 1. Score every entry (LLM calls are blocking -> run in thread)
         scored = await loop.run_in_executor(
-            None, partial(score_all_entries, _llm_client, request.data
+            None, partial(score_all_entries, _llm_client, request.data)
         )
 
         # 2. Build reports (also involve LLM calls)
         recruiter_report = await loop.run_in_executor(
-            None, partial(build_recruiter_report, _llm_client, scored
+            None, partial(build_recruiter_report, _llm_client, scored)
         )
         candidate_report = await loop.run_in_executor(
-            None, partial(build_candidate_report, _llm_client, scored
+            None, partial(build_candidate_report, _llm_client, scored)
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Report generation failed: {e}")

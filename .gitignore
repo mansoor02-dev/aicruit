@@ -9,3 +9,5 @@ __pycache__/
 AGENTS.md
 directory_tree.md
 script.txt
+# GCP deployment secrets
+scripts/gcp/.gcp-secrets.env

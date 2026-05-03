@@ -99,7 +99,7 @@ class MyApplicationResponse(BaseModel):
 class ApplicantInfo(BaseModel):
     application_id: UUID
     application_status: str
-    ai_match_score: int
+    stage_id: Optional[UUID] = None
     applied_at: datetime
     candidate_id: UUID
     candidate_name: str

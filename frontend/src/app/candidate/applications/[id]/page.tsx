@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
@@ -89,8 +89,9 @@ export default function ApplicationDetails() {
   }, [application]);
 
   const handleStartInterview = () => {
-    // Route through proctoring setup first, then to the interview page
-    window.open(`/candidate/proctoring-setup?applicationId=${application?.application_id}`, '_blank');
+    // Open the unified interview lobby directly (proctoring setup is now folded
+    // into the lobby itself).
+    window.open(`/candidate/interview/${application?.application_id}`, '_blank');
   };
 
   const getStatusBadge = (status: string) => {
@@ -98,11 +99,11 @@ export default function ApplicationDetails() {
       case 'APPLIED':
         return <Badge variant="outline">Applied</Badge>;
       case 'SCREENING':
-        return <Badge className="bg-blue-500/20 text-blue-500 border-blue-500/30">Under Review</Badge>;
+        return <Badge className="bg-primary/15 text-primary border-primary/25">Under Review</Badge>;
       case 'INTERVIEW_SCHEDULED':
-        return <Badge className="bg-yellow-500/20 text-yellow-500 border-yellow-500/30">Interview Scheduled</Badge>;
+        return <Badge className="bg-warning/20 text-warning-foreground border-warning/30">Interview Scheduled</Badge>;
       case 'OFFERED':
-        return <Badge className="bg-green-500/20 text-green-500 border-green-500/30">Offered</Badge>;
+        return <Badge className="bg-success/15 text-success border-success/25">Offered</Badge>;
       case 'REJECTED':
         return <Badge variant="destructive">Not Selected</Badge>;
       default:
@@ -147,7 +148,7 @@ export default function ApplicationDetails() {
           </Button>
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-foreground">{application.job_title}</h1>
+              <h1 className="text-3xl font-extrabold tracking-tight text-foreground">{application.job_title}</h1>
               <div className="flex items-center gap-2 mt-2">
                 <Building2 className="w-4 h-4 text-muted-foreground" />
                 <span className="text-muted-foreground">AIcruit Company</span>

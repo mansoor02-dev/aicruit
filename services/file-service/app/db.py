@@ -1,16 +1,14 @@
-import os
+﻿import os
 from sqlalchemy import create_engine, Column, String, Text, BigInteger, DateTime
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.sql import func
 
-DATABASE_URL = os.getenv("DATABASE_URL") or (
-    f"postgresql+psycopg2://{os.getenv('DB_USER','admin')}:{os.getenv('DB_PASS','admin123')}")
-
-if 'DB_HOST' in os.environ:
-    DATABASE_URL += f"@{os.getenv('DB_HOST','localhost')}:{os.getenv('DB_PORT','5432')}/{os.getenv('DB_NAME','aicruit')}"
-else:
-    # fallback to localhost connection string
-    DATABASE_URL = DATABASE_URL + f"@{os.getenv('DB_HOST','localhost')}:{os.getenv('DB_PORT','5432')}/{os.getenv('DB_NAME','aicruit')}"
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    DATABASE_URL = (
+        f"postgresql+psycopg2://{os.getenv('DB_USER','admin')}:{os.getenv('DB_PASS','admin123')}"
+        f"@{os.getenv('DB_HOST','localhost')}:{os.getenv('DB_PORT','5432')}/{os.getenv('DB_NAME','aicruit')}"
+    )
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

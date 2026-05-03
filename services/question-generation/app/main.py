@@ -17,7 +17,7 @@ sys.path.insert(0, "/app")
 sys.path.append(str(Path(__file__).parent.parent))
 
 from shared.llm_client import LLMClient
-from shared.embedding_provider import get_provider
+from pipelines.llm_loader import get_embedder
 from pipelines.answer_evaluator import AnswerEvaluator
 from pipelines.orchestrator import InterviewOrchestrator
 from pipelines.question_generator import QuestionGenerator
@@ -46,7 +46,7 @@ async def lifespan(app: FastAPI):
         dataset = list(csv.DictReader(f))
     logger.info(f"Dataset loaded: {len(dataset)} questions")
 
-    evaluator = AnswerEvaluator(embedder=get_provider())
+    evaluator = AnswerEvaluator(embedder=get_embedder())
     question_generator = QuestionGenerator(dataset_questions=dataset)
 
     orchestrator = InterviewOrchestrator(

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -6,10 +6,11 @@ import { useAuth, UserRole } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Spinner } from '@/components/ui/spinner';
 import { useToast } from '@/hooks/use-toast';
-import { Briefcase, User, ArrowRight, Loader2 } from 'lucide-react';
+import { Briefcase, User, ArrowRight, Sparkles } from 'lucide-react';
 
 type AuthMode = 'login' | 'signup';
 
@@ -39,14 +40,9 @@ const Auth = () => {
     e.preventDefault();
 
     if (!email || !password) {
-      toast({
-        title: 'Error',
-        description: 'Please fill in all required fields',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: 'Please fill in all required fields', variant: 'destructive' });
       return;
     }
-
     if (!validatePassword(password)) {
       toast({
         title: 'Invalid Password',
@@ -55,31 +51,16 @@ const Auth = () => {
       });
       return;
     }
-
     if (mode === 'signup' && !name) {
-      toast({
-        title: 'Error',
-        description: 'Please enter your full name',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: 'Please enter your full name', variant: 'destructive' });
       return;
     }
-
     if (mode === 'signup' && role === 'RECRUITER' && (!phone || !companyName)) {
-      toast({
-        title: 'Error',
-        description: 'Please enter your phone number and company name',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: 'Please enter your phone number and company name', variant: 'destructive' });
       return;
     }
-
     if (mode === 'signup' && role === 'CANDIDATE' && !phone) {
-      toast({
-        title: 'Error',
-        description: 'Please enter your phone number',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: 'Please enter your phone number', variant: 'destructive' });
       return;
     }
 
@@ -87,33 +68,21 @@ const Auth = () => {
     try {
       if (mode === 'login') {
         await login(email, password, role);
-
-        toast({
-          title: 'Success',
-          description: 'Welcome back!',
-        });
-
-        // Redirect based on role
-        if (role === 'RECRUITER') {
-          router.push('/recruiter/dashboard');
-        } else {
-          router.push('/candidate/job');
-        }
+        toast({ title: 'Success', description: 'Welcome back!' });
+        if (role === 'RECRUITER') router.push('/recruiter/dashboard');
+        else router.push('/candidate/job');
         return;
       }
-
       await signup(email, password, name, role, phone, companyName);
-
       toast({
         title: 'Verify your email',
         description: 'We have sent you a 6-digit OTP. Please verify to continue.',
       });
-
       router.push(`/otp?email=${encodeURIComponent(email)}&role=${role}`);
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: 'Error',
-        description: error.message || 'Authentication failed. Please try again.',
+        description: error?.message || 'Authentication failed. Please try again.',
         variant: 'destructive',
       });
     } finally {
@@ -122,48 +91,57 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
+    <div className="relative min-h-screen flex items-center justify-center p-4 overflow-hidden">
+      {/* Decorative blobs */}
+      <div className="pointer-events-none absolute -top-32 -left-32 w-[420px] h-[420px] rounded-full bg-primary/15 blur-3xl animate-float" />
+      <div className="pointer-events-none absolute -bottom-32 -right-24 w-[460px] h-[460px] rounded-full bg-warning/15 blur-3xl animate-float" style={{ animationDelay: '1s' }} />
+      <div className="pointer-events-none absolute inset-0 bg-grid opacity-30 [mask-image:radial-gradient(ellipse_at_center,black_30%,transparent_75%)]" />
+
+      <div className="relative w-full max-w-md animate-fade-in-up">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-2 mb-4">
-            <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center">
+          <div className="inline-flex items-center gap-2 mb-5">
+            <div className="w-14 h-14 rounded-2xl bg-brand-gradient flex items-center justify-center shadow-glow animate-scale-in">
               <span className="text-primary-foreground font-bold text-xl">AI</span>
             </div>
           </div>
-          <h1 className="text-3xl font-bold text-foreground">AIcruit</h1>
-          <p className="text-muted-foreground mt-2">AI-Powered Recruitment Platform</p>
+          <h1 className="text-4xl font-extrabold tracking-tight">
+            <span className="text-brand-gradient">AIcruit</span>
+          </h1>
+          <p className="text-muted-foreground mt-2 inline-flex items-center gap-1.5 text-sm">
+            <Sparkles className="w-3.5 h-3.5 text-primary" />
+            AI-Powered Recruitment Platform
+          </p>
         </div>
 
-        <Card className="bg-card border-border">
+        <Card className="border-border/70 shadow-xl backdrop-blur-sm bg-card/95 animate-scale-in">
           <CardHeader className="space-y-1 pb-4">
             <CardTitle className="text-2xl text-center">
-              {mode === 'login' ? 'Welcome back' : 'Create an account'}
+              {mode === 'login' ? 'Welcome back' : 'Create your account'}
             </CardTitle>
             <CardDescription className="text-center">
-              {mode === 'login'
-                ? 'Sign in to your account to continue'
-                : 'Enter your details to get started'}
+              {mode === 'login' ? 'Sign in to continue to your dashboard' : 'Get started with AIcruit in seconds'}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {/* Role Selection */}
-            <Tabs value={role || 'RECRUITER'} onValueChange={(v) => {
-              setRole(v as UserRole);
-              if (v === 'CANDIDATE') {
-                setCompanyName('');
-              }
-            }} className="mb-6">
-              <TabsList className="grid w-full grid-cols-2 bg-muted">
+            <Tabs
+              value={role || 'RECRUITER'}
+              onValueChange={(v) => {
+                setRole(v as UserRole);
+                if (v === 'CANDIDATE') setCompanyName('');
+              }}
+              className="mb-6"
+            >
+              <TabsList className="grid w-full grid-cols-2 bg-muted p-1 h-11">
                 <TabsTrigger
                   value="RECRUITER"
-                  className="flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                  className="flex items-center gap-2 rounded-md transition-all data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-sm"
                 >
                   <Briefcase className="w-4 h-4" />
                   Recruiter
                 </TabsTrigger>
                 <TabsTrigger
                   value="CANDIDATE"
-                  className="flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                  className="flex items-center gap-2 rounded-md transition-all data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-sm"
                 >
                   <User className="w-4 h-4" />
                   Candidate
@@ -173,127 +151,74 @@ const Auth = () => {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               {mode === 'signup' && (
+                <div className="space-y-2 animate-fade-in-up">
+                  <Label htmlFor="name">Full Name</Label>
+                  <Input id="name" placeholder="John Doe" value={name} onChange={(e) => setName(e.target.value)} />
+                </div>
+              )}
+
+              <div className="space-y-2 animate-fade-in-up" style={{ animationDelay: '50ms' }}>
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2 animate-fade-in-up" style={{ animationDelay: '100ms' }}>
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+                {mode === 'signup' && (
+                  <p className="text-xs text-muted-foreground">
+                    Min 8 characters with uppercase, lowercase, number, and symbol
+                  </p>
+                )}
+              </div>
+
+              {mode === 'signup' && (
                 <>
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Full Name</Label>
+                  <div className="space-y-2 animate-fade-in-up" style={{ animationDelay: '150ms' }}>
+                    <Label htmlFor="phone">Phone Number</Label>
                     <Input
-                      id="name"
-                      placeholder="John Doe"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      className="bg-background"
+                      id="phone"
+                      placeholder="+1 (555) 123-4567"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
                     />
                   </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="you@example.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="bg-background"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="password">Password</Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      placeholder="••••••••"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="bg-background"
-                    />
-                    {mode === 'signup' && (
-                      <p className="text-xs text-muted-foreground">
-                        Min 8 characters with uppercase, lowercase, number, and symbol
-                      </p>
-                    )}
-                  </div>
-
                   {role === 'RECRUITER' && (
-                    <>
-                      <div className="space-y-2">
-                        <Label htmlFor="phone">Phone Number</Label>
-                        <Input
-                          id="phone"
-                          placeholder="+1 (555) 123-4567"
-                          value={phone}
-                          onChange={(e) => setPhone(e.target.value)}
-                          className="bg-background"
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="companyName">Company Name</Label>
-                        <Input
-                          id="companyName"
-                          placeholder="Your Company"
-                          value={companyName}
-                          onChange={(e) => setCompanyName(e.target.value)}
-                          className="bg-background"
-                        />
-                      </div>
-                    </>
-                  )}
-
-                  {role === 'CANDIDATE' && (
-                    <div className="space-y-2">
-                      <Label htmlFor="phone">Phone Number</Label>
+                    <div className="space-y-2 animate-fade-in-up" style={{ animationDelay: '200ms' }}>
+                      <Label htmlFor="companyName">Company Name</Label>
                       <Input
-                        id="phone"
-                        placeholder="+1 (555) 123-4567"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        className="bg-background"
+                        id="companyName"
+                        placeholder="Your Company"
+                        value={companyName}
+                        onChange={(e) => setCompanyName(e.target.value)}
                       />
                     </div>
                   )}
                 </>
               )}
 
-              {mode === 'login' && (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="you@example.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="bg-background"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="password">Password</Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      placeholder="••••••••"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="bg-background"
-                    />
-                  </div>
-                </>
-              )}
-
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={loading}
-              >
+              <Button type="submit" size="lg" className="w-full mt-2" disabled={loading}>
                 {loading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <>
+                    <Spinner size="sm" className="!border-primary-foreground/30 !border-t-primary-foreground" />
+                    <span>Please wait...</span>
+                  </>
                 ) : (
                   <>
                     {mode === 'login' ? 'Sign In' : 'Create Account'}
-                    <ArrowRight className="w-4 h-4 ml-2" />
+                    <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
                   </>
                 )}
               </Button>
@@ -303,11 +228,19 @@ const Auth = () => {
               <button
                 type="button"
                 onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}
-                className="text-sm text-primary hover:underline"
+                className="text-sm text-muted-foreground hover:text-primary transition-colors"
               >
-                {mode === 'login'
-                  ? "Don't have an account? Sign up"
-                  : 'Already have an account? Sign in'}
+                {mode === 'login' ? (
+                  <>
+                    Don&apos;t have an account?{' '}
+                    <span className="font-semibold text-primary hover:underline">Sign up</span>
+                  </>
+                ) : (
+                  <>
+                    Already have an account?{' '}
+                    <span className="font-semibold text-primary hover:underline">Sign in</span>
+                  </>
+                )}
               </button>
             </div>
           </CardContent>
@@ -318,4 +251,3 @@ const Auth = () => {
 };
 
 export default Auth;
-

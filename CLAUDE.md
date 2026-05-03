@@ -27,10 +27,10 @@ The gateway is the single front door; it fans out to microservices over HTTP via
 | `frontend`            | 3000 | Next.js UI (calls gateway only)                                        |
 | `gateway`             | 8000 | API gateway:`/auth/*` (Cognito), `/job/*`, `/interview/*`        |
 | `file-service`        | 8005 | File uploads; serves files at `/static/...` (uploads dir mounted in) |
-| `resume-parser`       | 8006 | PDF/DOCX → structured JSON via Gemini or local GGUF model             |
-| `transcribe-audio`    | 8007 | Whisper/Groq audio → transcript                                       |
-| `question-generation` | 8010 | LLM (OpenRouter) generates next interview question + follow-ups        |
-| `text-to-speech`      | 8011 | Piper local TTS (espeak-ng) — synthesizes the question audio          |
+| `resume-parser`       | 8006 | PDF/DOCX -> structured JSON via Gemini API                              |
+| `transcribe-audio`    | 8007 | Groq Whisper API: audio -> transcript                                   |
+| `question-generation` | 8010 | LLM (OpenRouter) Q&A; embeddings via Gemini gemini-embedding-001 (768d) |
+| `text-to-speech`      | 8011 | Google Cloud TTS API: synthesizes the question audio                    |
 | `report-generation`   | 8012 | LLM-powered final interview reports (recruiter + candidate views)      |
 | `postgres`            | 5432 | Primary datastore                                                      |
 | `pgadmin`             | 5050 | Admin UI (`admin@aicruit.com` / `admin123` in compose)             |
@@ -130,12 +130,14 @@ Each has a `.env` (not committed for some) with provider keys: `GEMINI_API_KEY`,
 
 ## Deployment
 
-- **Railway** is the production target. Each service has both a `Dockerfile` and a `nixpacks.toml` + `Procfile`; Railway picks Nixpacks by default. The `Procfile` uses `gunicorn -k uvicorn.workers.UvicornWorker -w 2 -b 0.0.0.0:$PORT`.
-- Service-to-service URLs **must** be set per service via env vars on Railway (e.g. `QUESTION_GEN_URL`, `TTS_URL`, `TRANSCRIBE_URL`, `REPORT_GEN_URL`, `FILE_SERVICE_URL`, `RESUME_PARSER_URL`). Defaults in the code point at `localhost` and will not work in prod.
-- `FRONTEND_ORIGINS` (comma-separated) controls CORS on every Python service — set this on every deployed service, not just the gateway.
+GCP Cloud Run for backend services, Cloud SQL for Postgres, GCS for uploads, Secret Manager for keys; Vercel for frontend. Per-service deploy: `bash scripts/gcp/deploy.sh <name>`. See [DEPLOY.md](./DEPLOY.md) for the full guide.
+
+- Service-to-service URLs are injected per service as env vars (e.g. `QUESTION_GEN_URL`, `TTS_URL`, `TRANSCRIBE_URL`, `REPORT_GEN_URL`, `FILE_SERVICE_URL`, `RESUME_PARSER_URL`). Defaults in the code point at `localhost` and will not work in prod.
+- `FRONTEND_ORIGINS` (comma-separated) controls CORS on every Python service - set this on every deployed service, not just the gateway.
 
 ## Conventions worth knowing
 
+- **All services are API-only**; no local model files, no GPU dependencies. Dockerfiles are slim single-stage python:3.11-slim images. file-service has a STORAGE_BACKEND env (local/gcs) - local for dev, gcs on Cloud Run.
 - **All Python services are FastAPI + SQLAlchemy** with the same shape: `app/main.py` (or `app/api.py` for resume-parser) wiring CORS + routers; routers/handlers in submodules. Stick to this pattern.
 - **`/health` endpoint** exists on every service and is wired into compose healthchecks for the LLM services.
 - **No tests** are checked in. There is no test runner configured in any service or in the frontend. If adding tests, you are establishing the convention.

@@ -33,7 +33,10 @@ class ApplicationModel(Base):
     # --- Application Details ---
     status = Column(String(50), default="APPLIED")  # APPLIED, SCREENING, INTERVIEW_SCHEDULED, INTERVIEW_COMPLETED, OFFERED, REJECTED
     ai_match_score = Column(Integer, default=0)
-    
+
+    # --- Kanban stage assignment (source of truth; status mirrors stage name) ---
+    stage_id = Column(UUID(as_uuid=True), ForeignKey("job_stages.id", ondelete="SET NULL"), nullable=True)
+
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
@@ -41,6 +44,7 @@ class ApplicationModel(Base):
     job = relationship("JobModel", back_populates="applications")
     candidate = relationship("CandidateModel", back_populates="applications")
     resume = relationship("ResumeModel", back_populates="applications")
+    stage = relationship("JobStageModel", back_populates="applications")
     
     # Ensure candidate can apply to same job only once
     __table_args__ = (

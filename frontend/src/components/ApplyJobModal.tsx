@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useRef } from 'react';
 import {
@@ -108,7 +108,7 @@ export function ApplyJobModal({ jobId, jobTitle, isOpen, onClose, onApplySuccess
   const [projects, setProjects] = useState<Project[]>([{ ...emptyProject }]);
   const [skills, setSkills] = useState<string[]>([]);
   const [newSkill, setNewSkill] = useState('');
-  // ── Recruiter-defined custom question answers, keyed by question id ──
+  // â”€â”€ Recruiter-defined custom question answers, keyed by question id â”€â”€
   const [answers, setAnswers] = useState<Record<string, string | number | boolean | null>>({});
   const updateAnswer = (qid: string, value: string | number | boolean | null) =>
     setAnswers((prev) => ({ ...prev, [qid]: value }));
@@ -141,6 +141,7 @@ export function ApplyJobModal({ jobId, jobTitle, isOpen, onClose, onApplySuccess
     try {
       const formData = new FormData();
       formData.append('file', file);
+      if (jobId) formData.append('job_id', jobId);
 
       const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
       const token = getAuthToken();
@@ -186,7 +187,7 @@ export function ApplyJobModal({ jobId, jobTitle, isOpen, onClose, onApplySuccess
         }
         toast({ title: 'Resume parsed!', description: 'Form auto-filled from your resume' });
       } else {
-        toast({ title: 'Resume uploaded', description: 'Could not parse — please fill in manually' });
+        toast({ title: 'Resume uploaded', description: 'Could not parse â€” please fill in manually' });
       }
       setStep('form');
     } catch (error: any) {
@@ -215,7 +216,7 @@ export function ApplyJobModal({ jobId, jobTitle, isOpen, onClose, onApplySuccess
     if (!name || !email || !phone || !location) {
       toast({ title: 'Missing fields', description: 'Please fill all candidate details', variant: 'destructive' }); return;
     }
-    // ── Validate custom application questions ──
+    // â”€â”€ Validate custom application questions â”€â”€
     for (const q of applicationQuestions) {
       const v = answers[q.id];
       const isEmpty = v === undefined || v === null || (typeof v === 'string' && v.trim() === '');
@@ -335,7 +336,7 @@ export function ApplyJobModal({ jobId, jobTitle, isOpen, onClose, onApplySuccess
                   </div>
                   <p className="text-base font-semibold text-foreground mb-1">Drag & drop your resume</p>
                   <p className="text-sm text-muted-foreground mb-3">or click to browse files</p>
-                  <Badge variant="outline" className="text-xs">PDF, DOCX — Max 10MB</Badge>
+                  <Badge variant="outline" className="text-xs">PDF, DOCX â€” Max 10MB</Badge>
                   <input ref={fileInputRef} type="file" accept=".pdf,.docx" className="hidden"
                     onChange={(e) => { if (e.target.files?.[0]) handleFileSelect(e.target.files[0]); }} />
                 </div>
@@ -348,7 +349,7 @@ export function ApplyJobModal({ jobId, jobTitle, isOpen, onClose, onApplySuccess
             <div className="space-y-8">
               {/* Resume badge */}
               <div className="flex items-center gap-2 p-3 bg-accent/50 rounded-lg border border-border">
-                <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
+                <CheckCircle className="w-4 h-4 text-success shrink-0" />
                 <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
                 <span className="text-sm font-medium truncate flex-1">{fileName}</span>
                 <Badge variant="secondary" className="text-xs shrink-0">Parsed</Badge>
@@ -546,7 +547,7 @@ export function ApplyJobModal({ jobId, jobTitle, isOpen, onClose, onApplySuccess
 }
 
 
-// ─── ApplicationQuestionField ───────────────────────────────────────────────
+// â”€â”€â”€ ApplicationQuestionField â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Renders one recruiter-defined question and reports its answer up.
 
 function ApplicationQuestionField({
@@ -570,7 +571,7 @@ function ApplicationQuestionField({
     <p className="text-xs text-muted-foreground mt-1">{question.help_text}</p>
   ) : null;
 
-  // ── Text / Textarea (with character counter) ──
+  // â”€â”€ Text / Textarea (with character counter) â”€â”€
   if (question.type === 'text' || question.type === 'textarea') {
     const v = (value as string) ?? '';
     const len = v.length;
@@ -619,7 +620,7 @@ function ApplicationQuestionField({
     );
   }
 
-  // ── Number ──
+  // â”€â”€ Number â”€â”€
   if (question.type === 'number') {
     return (
       <div className="space-y-1.5">
@@ -637,7 +638,7 @@ function ApplicationQuestionField({
     );
   }
 
-  // ── Date ──
+  // â”€â”€ Date â”€â”€
   if (question.type === 'date') {
     return (
       <div className="space-y-1.5">
@@ -653,7 +654,7 @@ function ApplicationQuestionField({
     );
   }
 
-  // ── Email / URL ──
+  // â”€â”€ Email / URL â”€â”€
   if (question.type === 'email' || question.type === 'url') {
     return (
       <div className="space-y-1.5">
@@ -670,7 +671,7 @@ function ApplicationQuestionField({
     );
   }
 
-  // ── Select (multiple choice) ──
+  // â”€â”€ Select (multiple choice) â”€â”€
   if (question.type === 'select') {
     const v = (value as string) ?? '';
     return (
@@ -691,7 +692,7 @@ function ApplicationQuestionField({
     );
   }
 
-  // ── Yes / No ──
+  // â”€â”€ Yes / No â”€â”€
   if (question.type === 'yes_no') {
     const v = value as boolean | null;
     return (

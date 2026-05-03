@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
 import { CandidateLayout } from '@/components/layout/CandidateLayout';
@@ -55,8 +55,8 @@ export default function Profile() {
     <CandidateLayout>
       <div className="max-w-3xl mx-auto space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">My Profile</h1>
-          <p className="text-muted-foreground">Complete your profile to apply for jobs quickly</p>
+          <h1 className="text-3xl font-extrabold tracking-tight text-foreground">My Profile</h1>
+          <p className="text-muted-foreground mt-1">Complete your profile to apply for jobs quickly</p>
         </div>
 
         {/* Profile Header */}
@@ -69,8 +69,8 @@ export default function Profile() {
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1">
-                <h2 className="text-2xl font-bold text-foreground">{user?.name}</h2>
-                <p className="text-muted-foreground">{user?.email}</p>
+                <h2 className="text-3xl font-extrabold tracking-tight text-foreground">{user?.name}</h2>
+                <p className="text-muted-foreground mt-1">{user?.email}</p>
                 <div className="mt-3">
                   <Button variant="outline" size="sm">
                     <Upload className="w-4 h-4 mr-2" />

@@ -1,21 +1,55 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query, Form
 from sqlalchemy.orm import Session
-from typing import List, Union
+from typing import List, Optional, Union
+from datetime import date
 import httpx
 from uuid import UUID
 import os
 import json
+from pydantic import BaseModel
 
 from ..core.db import get_db_session
 from ..models.job_model import JobModel
 from ..models.application_model import ApplicationModel
 from ..models.resume_model import ResumeModel
+from ..models.resume_job_score_model import ResumeJobScoreModel
 from ..models.user import UserModel
 from ..models.job import JobCreate, JobResponse, JobUpdate, JobWithApplicantsResponse, JobForCandidateResponse, ApplicantInfo
-from ..models.application import ApplicationCreate, ApplicationResponse
+from ..models.application import (
+    ApplicationCreate,
+    ApplicationResponse,
+    ApplicationStageUpdate,
+    ApplicationStageResponse,
+    BoardInterview,
+    BoardCandidate,
+    BoardStage,
+    BoardResponse,
+    BulkMoveRequest,
+    BulkMoveResponse,
+)
+from ..models.job_stage_model import JobStageModel
+from ..models.interview_model import InterviewModel
+from sqlalchemy.orm import joinedload
+import logging
+from ..models.job_stage import JobStageCreate, JobStageUpdate, JobStageResponse, StageReorderItem
+from ..models.job_interview_settings_model import JobInterviewSettingsModel
+from ..services import job_stages as stage_svc
+from ..services import bulk_move as bulk_move_svc
+from ..services.auto_schedule import auto_schedule as _run_auto_schedule
 from ..core.security import get_current_user, RoleChecker
 
 router = APIRouter()
+
+
+def _resolve_ai_match_score(db: Session, resume_id: UUID, job_id: UUID) -> Optional[int]:
+    """Look up the precomputed AI match score for this resume+job pair, if any."""
+    row = (
+        db.query(ResumeJobScoreModel)
+        .filter_by(resume_id=resume_id, job_id=job_id)
+        .first()
+    )
+    return row.overall if row else None
+
 
 def _build_resume_url(file_url: str) -> str:
     """Build full resume download URL from the relative path stored in DB.
@@ -217,9 +251,13 @@ def update_job(
 # =========================================================
 # 5a. UPLOAD & PARSE RESUME (Candidates Only)
 # =========================================================
+logger = logging.getLogger(__name__)
+
+
 @router.post("/upload-resume", status_code=status.HTTP_200_OK)
 async def upload_and_parse_resume(
     file: UploadFile = File(...),
+    job_id: Optional[UUID] = Form(None),
     db: Session = Depends(get_db_session),
     current_user: UserModel = Depends(allow_candidates)
 ):
@@ -293,6 +331,39 @@ async def upload_and_parse_resume(
                     print(f"⚠️ Resume parsing returned status {parse_response.status_code}")
         except Exception as parse_err:
             print(f"⚠️ Failed to call parse-resume service: {parse_err}")
+
+        # Step 3.5: If job_id provided, score the resume against the job (best-effort)
+        if job_id is not None:
+            job = db.query(JobModel).filter(JobModel.id == job_id).first()
+            if job is None or job.status != "OPEN":
+                logger.warning(
+                    "upload_resume.score_skipped_job",
+                    extra={"job_id": str(job_id), "reason": "missing_or_closed"},
+                )
+            else:
+                job_payload = {
+                    "title": job.title,
+                    "description": job.description,
+                    "required_skills": job.required_skills or [],
+                    "experience_level": job.experience_level,
+                    "location": job.location,
+                    "type": job.type,
+                }
+                from ..services.resume_scoring import score_resume_for_job
+                from ..models.resume_job_score_model import ResumeJobScoreModel
+                from sqlalchemy.dialects.postgresql import insert as pg_insert
+                from sqlalchemy import func
+
+                score = await score_resume_for_job(parsed_data or {}, job_payload)
+                if score is not None:
+                    stmt = pg_insert(ResumeJobScoreModel).values(
+                        resume_id=new_resume.id, job_id=job_id, overall=score
+                    ).on_conflict_do_update(
+                        index_elements=["resume_id", "job_id"],
+                        set_={"overall": score, "updated_at": func.now()},
+                    )
+                    db.execute(stmt)
+                    db.commit()
 
         # Step 4: Return resume info + parsed data
         # The parser returns: { personal_info: {name, email, ...}, skills: [...], ... }
@@ -466,6 +537,17 @@ async def apply_to_job(
                 "value": value,
             })
 
+        # Look up the first stage of the job so the new application lands on the board
+        first_stage = (
+            db.query(JobStageModel)
+            .filter(JobStageModel.job_id == job.id)
+            .order_by(JobStageModel.position.asc())
+            .first()
+        )
+
+        # Resolve precomputed AI match score (Wave 2 Slice D)
+        ai_match_score = _resolve_ai_match_score(db, resume.id, application_data.job_id)
+
         # Create application with all candidate-submitted form data
         new_application = ApplicationModel(
             job_id=application_data.job_id,
@@ -481,17 +563,27 @@ async def apply_to_job(
             experience=experience_data,
             projects=projects_data,
             question_responses=validated_responses,
-            status="APPLIED"
+            stage_id=first_stage.id if first_stage else None,
+            # NOTE: applications.status has a CHECK constraint that restricts it
+            # to a fixed enum (APPLIED, SCREENING, INTERVIEW_SCHEDULED,
+            # INTERVIEW_COMPLETED, OFFERED, REJECTED). Stage names are
+            # recruiter-defined free text (e.g. "Phone Screen") and would violate
+            # the constraint. The kanban board uses stage_id as the source of
+            # truth for column placement, so we leave status as APPLIED on
+            # creation and let the stage-update endpoint manage transitions.
+            status="APPLIED",
+            ai_match_score=ai_match_score,
         )
-        
+
         db.add(new_application)
         db.commit()
         db.refresh(new_application)
-        
+
         return new_application
     except HTTPException as he:
         raise he
     except Exception as e:
+        logger.exception("apply_to_job failed")
         db.rollback()
         raise HTTPException(status_code=500, detail="Failed to apply to job: " + str(e))
 
@@ -727,3 +819,401 @@ def get_application_detail(
         "resume_id": str(resume.id) if resume else None,
         "resume_url": _build_resume_url(resume.file_url) if resume else "",
     }
+
+
+# =========================================================
+# 9. STAGE CRUD (Recruiters Only)
+# =========================================================
+def _get_owned_job(job_id: str, db: Session, current_user: UserModel) -> JobModel:
+    try:
+        UUID(job_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    job = db.query(JobModel).filter(JobModel.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if not current_user.recruiter or job.company_id != current_user.recruiter.company_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only manage jobs from your company"
+        )
+    return job
+
+
+@router.get("/{job_id}/stages", response_model=List[JobStageResponse])
+def list_job_stages(
+    job_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: UserModel = Depends(allow_recruiters)
+):
+    job = _get_owned_job(job_id, db, current_user)
+    return stage_svc.list_stages(db, job.id)
+
+
+@router.post("/{job_id}/stages", response_model=JobStageResponse, status_code=status.HTTP_201_CREATED)
+def create_job_stage(
+    job_id: str,
+    payload: JobStageCreate,
+    db: Session = Depends(get_db_session),
+    current_user: UserModel = Depends(allow_recruiters)
+):
+    job = _get_owned_job(job_id, db, current_user)
+    return stage_svc.create_stage(db, job.id, name=payload.name, position=payload.position)
+
+
+@router.patch("/{job_id}/stages/{stage_id}", response_model=JobStageResponse)
+def rename_job_stage(
+    job_id: str,
+    stage_id: UUID,
+    payload: JobStageUpdate,
+    db: Session = Depends(get_db_session),
+    current_user: UserModel = Depends(allow_recruiters)
+):
+    job = _get_owned_job(job_id, db, current_user)
+    if payload.name is None:
+        raise HTTPException(status_code=400, detail="name is required")
+    try:
+        return stage_svc.rename_stage(db, job.id, stage_id, payload.name)
+    except stage_svc.StageNotFoundError:
+        raise HTTPException(status_code=404, detail="Stage not found")
+
+
+@router.put("/{job_id}/stages/reorder", response_model=List[JobStageResponse])
+def reorder_job_stages(
+    job_id: str,
+    items: List[StageReorderItem],
+    db: Session = Depends(get_db_session),
+    current_user: UserModel = Depends(allow_recruiters)
+):
+    job = _get_owned_job(job_id, db, current_user)
+    try:
+        return stage_svc.reorder_stages(db, job.id, items)
+    except stage_svc.StageReorderMismatchError:
+        raise HTTPException(status_code=400, detail="Reorder body must include all stages of this job")
+
+
+@router.delete("/{job_id}/stages/{stage_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_job_stage(
+    job_id: str,
+    stage_id: UUID,
+    move_to: Optional[UUID] = None,
+    db: Session = Depends(get_db_session),
+    current_user: UserModel = Depends(allow_recruiters)
+):
+    job = _get_owned_job(job_id, db, current_user)
+    try:
+        stage_svc.delete_stage(db, job.id, stage_id, move_to=move_to)
+    except stage_svc.StageNotFoundError:
+        raise HTTPException(status_code=404, detail="Stage not found")
+    except stage_svc.InvalidMoveTargetError:
+        raise HTTPException(status_code=422, detail="move_to does not exist on this job")
+    except stage_svc.StageConflictError as e:
+        raise HTTPException(
+            status_code=409,
+            detail={"candidate_count": e.candidate_count, "message": "Stage has candidates; provide move_to"}
+        )
+    return None
+
+
+# =========================================================
+# 10. AI INTERVIEW AUTO-SCHEDULE (Recruiters Only)
+# =========================================================
+class AutoScheduleRequest(BaseModel):
+    stage_id: UUID
+    start_date: date
+    end_date: date
+
+
+def _ensure_ai_enabled(db: Session, job_id) -> None:
+    settings = (
+        db.query(JobInterviewSettingsModel)
+        .filter(JobInterviewSettingsModel.job_id == job_id)
+        .first()
+    )
+    if settings is None or not settings.ai_interview_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="AI interview not enabled for this job",
+        )
+
+
+@router.post("/{job_id}/auto-schedule")
+def auto_schedule_endpoint(
+    job_id: str,
+    payload: AutoScheduleRequest,
+    db: Session = Depends(get_db_session),
+    current_user: UserModel = Depends(allow_recruiters),
+):
+    job = _get_owned_job(job_id, db, current_user)
+    _ensure_ai_enabled(db, job.id)
+    if payload.end_date < payload.start_date:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="end_date must be on or after start_date",
+        )
+    return _run_auto_schedule(
+        db,
+        job,
+        payload.stage_id,
+        payload.start_date,
+        payload.end_date,
+        dry_run=False,
+    )
+
+
+@router.get("/{job_id}/auto-schedule/preview")
+def auto_schedule_preview(
+    job_id: str,
+    stage_id: UUID = Query(...),
+    start_date: date = Query(...),
+    end_date: date = Query(...),
+    db: Session = Depends(get_db_session),
+    current_user: UserModel = Depends(allow_recruiters),
+):
+    job = _get_owned_job(job_id, db, current_user)
+    _ensure_ai_enabled(db, job.id)
+    if end_date < start_date:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="end_date must be on or after start_date",
+        )
+    return _run_auto_schedule(
+        db,
+        job,
+        stage_id,
+        start_date,
+        end_date,
+        dry_run=True,
+    )
+
+
+# =========================================================
+# 11. CANDIDATE STAGE ASSIGNMENT (Recruiters Only)
+# =========================================================
+_logger = logging.getLogger(__name__)
+
+
+@router.patch(
+    "/{job_id}/applications/{application_id}/stage",
+    response_model=ApplicationStageResponse,
+)
+def update_application_stage(
+    job_id: str,
+    application_id: UUID,
+    payload: ApplicationStageUpdate,
+    db: Session = Depends(get_db_session),
+    current_user: UserModel = Depends(allow_recruiters),
+):
+    job = _get_owned_job(job_id, db, current_user)
+
+    if not payload.rejected and payload.stage_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Either stage_id or rejected must be provided",
+        )
+
+    application = (
+        db.query(ApplicationModel)
+        .filter(
+            ApplicationModel.id == application_id,
+            ApplicationModel.job_id == job.id,
+        )
+        .first()
+    )
+    if not application:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    if payload.rejected:
+        application.status = "REJECTED"
+    else:
+        stage = (
+            db.query(JobStageModel)
+            .filter(
+                JobStageModel.id == payload.stage_id,
+                JobStageModel.job_id == job.id,
+            )
+            .first()
+        )
+        if not stage:
+            raise HTTPException(
+                status_code=400,
+                detail="Stage does not belong to this job",
+            )
+        application.stage_id = stage.id
+        application.status = stage.name
+
+    db.commit()
+    db.refresh(application)
+    return ApplicationStageResponse(
+        application_id=application.id,
+        stage_id=application.stage_id,
+        status=application.status,
+    )
+
+
+# =========================================================
+# 12. KANBAN BOARD FETCH (Recruiters Only)
+# =========================================================
+def _pick_interview(interviews):
+    """Pick the most-recent active interview, else the most-recent of any."""
+    if not interviews:
+        return None
+    active_states = {"scheduled", "in_progress", "expired"}
+    active = [i for i in interviews if i.status in active_states]
+    pool = active if active else list(interviews)
+    return max(pool, key=lambda i: i.created_at)
+
+
+def _build_board_candidate(app: ApplicationModel) -> BoardCandidate:
+    candidate = app.candidate
+    user = candidate.user if candidate else None
+    resume = app.resume
+    interview_obj = _pick_interview(app.interviews) if hasattr(app, "interviews") else None
+    interview_payload = None
+    if interview_obj is not None:
+        interview_payload = BoardInterview(
+            id=interview_obj.id,
+            status=interview_obj.status,
+            scheduled_at=interview_obj.scheduled_at,
+            expires_at=interview_obj.expires_at,
+        )
+    return BoardCandidate(
+        application_id=app.id,
+        candidate_id=candidate.id,
+        candidate_name=app.applicant_name or (user.full_name if user else ""),
+        candidate_email=app.applicant_email or (user.email if user else ""),
+        applied_at=app.created_at,
+        resume_url=_build_resume_url(resume.file_url) if resume else "",
+        stage_id=app.stage_id,
+        status=app.status,
+        ai_match_score=app.ai_match_score,
+        interview=interview_payload,
+    )
+
+
+@router.get("/{job_id}/board", response_model=BoardResponse)
+def get_job_board(
+    job_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: UserModel = Depends(allow_recruiters),
+):
+    job = _get_owned_job(job_id, db, current_user)
+
+    stages = (
+        db.query(JobStageModel)
+        .filter(JobStageModel.job_id == job.id)
+        .order_by(JobStageModel.position.asc())
+        .all()
+    )
+
+    applications = (
+        db.query(ApplicationModel)
+        .options(joinedload(ApplicationModel.interviews))
+        .filter(ApplicationModel.job_id == job.id)
+        .all()
+    )
+
+    stage_buckets: dict = {s.id: [] for s in stages}
+    rejected: list = []
+
+    # First stage (lowest position) is used as a fallback bucket for orphaned
+    # applications (no stage_id, or stage_id pointing at a stage that no longer
+    # belongs to the job). We only use it for display; we do not mutate the DB.
+    fallback_stage_id = stages[0].id if stages else None
+
+    for app in applications:
+        candidate_payload = _build_board_candidate(app)
+        if app.status == "REJECTED":
+            rejected.append(candidate_payload)
+            continue
+        if app.stage_id is not None and app.stage_id in stage_buckets:
+            stage_buckets[app.stage_id].append(candidate_payload)
+            continue
+        # Orphan: missing or stale stage_id -> bucket into first stage if any
+        if fallback_stage_id is not None:
+            _logger.warning(
+                "Application %s on job %s has missing/stale stage_id %s; "
+                "bucketing into first stage %s for display",
+                app.id,
+                job.id,
+                app.stage_id,
+                fallback_stage_id,
+            )
+            stage_buckets[fallback_stage_id].append(candidate_payload)
+            continue
+        _logger.warning(
+            "Application %s on job %s has no stage and job has zero stages; skipping",
+            app.id,
+            job.id,
+        )
+
+    board_stages: List[BoardStage] = []
+    for s in stages:
+        bucket = stage_buckets[s.id]
+        bucket.sort(key=lambda c: c.applied_at, reverse=True)
+        board_stages.append(
+            BoardStage(id=s.id, position=s.position, name=s.name, candidates=bucket)
+        )
+
+    rejected.sort(key=lambda c: c.applied_at, reverse=True)
+    return BoardResponse(stages=board_stages, rejected=rejected)
+
+
+# =========================================================
+# 13. BULK MOVE BY AI SCORE (Recruiters Only)
+# =========================================================
+@router.post(
+    "/{job_id}/stages/{stage_id}/bulk-move",
+    response_model=BulkMoveResponse,
+)
+def stage_bulk_move(
+    job_id: str,
+    stage_id: UUID,
+    body: BulkMoveRequest,
+    db: Session = Depends(get_db_session),
+    current_user: UserModel = Depends(allow_recruiters),
+):
+    _get_owned_job(job_id, db, current_user)
+    try:
+        return bulk_move_svc.execute_bulk_move(
+            db,
+            UUID(job_id),
+            stage_id,
+            body.min_score,
+            body.target_stage_id,
+            dry_run=False,
+        )
+    except bulk_move_svc.NoNextStageError as e:
+        raise HTTPException(status_code=422, detail="no_next_stage") from e
+    except bulk_move_svc.StageNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@router.get(
+    "/{job_id}/stages/{stage_id}/bulk-move/preview",
+    response_model=BulkMoveResponse,
+)
+def stage_bulk_move_preview(
+    job_id: str,
+    stage_id: UUID,
+    min_score: int = Query(...),
+    target_stage_id: Optional[UUID] = Query(None),
+    db: Session = Depends(get_db_session),
+    current_user: UserModel = Depends(allow_recruiters),
+):
+    _get_owned_job(job_id, db, current_user)
+    try:
+        return bulk_move_svc.execute_bulk_move(
+            db,
+            UUID(job_id),
+            stage_id,
+            min_score,
+            target_stage_id,
+            dry_run=True,
+        )
+    except bulk_move_svc.NoNextStageError as e:
+        raise HTTPException(status_code=422, detail="no_next_stage") from e
+    except bulk_move_svc.StageNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e

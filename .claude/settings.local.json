@@ -4,7 +4,9 @@
       "Bash(ruff check *)",
       "Bash(bandit -r gateway/app services/file-service/app services/resume-parser/app services/question-generation/app services/question-generation/pipelines services/transcribe-audio/app services/text-to-speech/main.py services/report-generation/app -ll -q)",
       "Bash(xargs wc *)",
-      "Bash(python -c \"import ast; ast.parse\\(open\\(r'f:\\\\Projects\\\\AIcruit\\\\gateway\\\\app\\\\routes\\\\interview.py', encoding='utf-8'\\).read\\(\\)\\)\")"
+      "Bash(python -c \"import ast; ast.parse\\(open\\(r'f:\\\\Projects\\\\AIcruit\\\\gateway\\\\app\\\\routes\\\\interview.py', encoding='utf-8'\\).read\\(\\)\\)\")",
+      "Bash(rm -rf '/f/Projects/AIcruit/services/question-generation/cache/*' '/f/Projects/AIcruit/services/question-generation/cache/.[!.]*')",
+      "Bash(touch /f/Projects/AIcruit/services/question-generation/cache/.gitkeep)"
     ]
   }
 }

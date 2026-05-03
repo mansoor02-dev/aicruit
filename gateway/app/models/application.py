@@ -73,3 +73,78 @@ class ApplicationResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# =========================================================
+# Kanban: stage assignment + board fetch schemas
+# =========================================================
+class ApplicationStageUpdate(BaseModel):
+    stage_id: Optional[UUID] = None
+    rejected: bool = False
+
+
+class ApplicationStageResponse(BaseModel):
+    application_id: UUID
+    stage_id: Optional[UUID] = None
+    status: str
+
+    class Config:
+        from_attributes = True
+
+
+class BoardInterview(BaseModel):
+    id: UUID
+    status: str
+    scheduled_at: datetime
+    expires_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class BoardCandidate(BaseModel):
+    application_id: UUID
+    candidate_id: UUID
+    candidate_name: str
+    candidate_email: str
+    applied_at: datetime
+    resume_url: str
+    stage_id: Optional[UUID] = None
+    status: str
+    ai_match_score: Optional[int] = None
+    interview: Optional[BoardInterview] = None
+
+    class Config:
+        from_attributes = True
+
+
+class BoardStage(BaseModel):
+    id: UUID
+    position: int
+    name: str
+    candidates: List[BoardCandidate] = []
+
+
+class BoardResponse(BaseModel):
+    stages: List[BoardStage]
+    rejected: List[BoardCandidate]
+
+
+# =========================================================
+# Bulk Move by AI Score schemas
+# =========================================================
+class BulkMoveRequest(BaseModel):
+    min_score: int  # 0..100
+    target_stage_id: Optional[UUID] = None
+
+
+class BulkMoveSkipped(BaseModel):
+    application_id: UUID
+    reason: str  # "no_score" | "below_threshold"
+    ai_match_score: Optional[int] = None
+
+
+class BulkMoveResponse(BaseModel):
+    moved: List[UUID]
+    skipped: List[BulkMoveSkipped]
+    target_stage: dict  # {"id": str, "name": str}

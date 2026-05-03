@@ -32,6 +32,7 @@ class JobModel(Base):
     salary_max = Column(Integer, nullable=True)
     status = Column(String(20), default="OPEN")   # OPEN, CLOSED
     last_date_to_apply = Column(DateTime, nullable=True)
+    timezone = Column(String(64), nullable=False, default="UTC")
     
     # --- Custom Application Questions (recruiter-defined per job) ---
     # JSONB array of question objects: { id, label, type, required, min_length, max_length, options, ... }
@@ -45,3 +46,14 @@ class JobModel(Base):
     company = relationship("CompanyModel", back_populates="jobs")
     recruiter = relationship("RecruiterModel", back_populates="jobs")
     applications = relationship("ApplicationModel", back_populates="job", cascade="all, delete-orphan")
+    stages = relationship(
+        "JobStageModel",
+        back_populates="job",
+        cascade="all, delete-orphan",
+        order_by="JobStageModel.position",
+    )
+
+
+# Ensure related mapper class is registered so SQLAlchemy can resolve
+# the string reference 'JobStageModel' in the relationship() above.
+from . import job_stage_model  # noqa: E402,F401

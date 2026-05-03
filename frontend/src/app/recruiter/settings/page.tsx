@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
 import { RecruiterLayout } from '@/components/layout/RecruiterLayout';
@@ -39,25 +39,24 @@ export default function Settings() {
     <RecruiterLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Settings</h1>
-          <p className="text-muted-foreground">Manage your company profile and preferences</p>
+          <h1 className="text-3xl font-extrabold tracking-tight text-foreground">Settings</h1><p className="text-muted-foreground mt-1">Manage your company profile and preferences</p>
         </div>
 
         <Tabs defaultValue="company" className="space-y-6">
-          <TabsList className="bg-card border border-border">
-            <TabsTrigger value="company" className="flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+          <TabsList className="bg-muted p-1">
+            <TabsTrigger value="company" className="flex items-center gap-2 data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-sm">
               <Building2 className="w-4 h-4" />
               Company Profile
             </TabsTrigger>
-            <TabsTrigger value="team" className="flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <TabsTrigger value="team" className="flex items-center gap-2 data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-sm">
               <Users className="w-4 h-4" />
               Team
             </TabsTrigger>
-            <TabsTrigger value="billing" className="flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <TabsTrigger value="billing" className="flex items-center gap-2 data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-sm">
               <CreditCard className="w-4 h-4" />
               Billing
             </TabsTrigger>
-            <TabsTrigger value="notifications" className="flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <TabsTrigger value="notifications" className="flex items-center gap-2 data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-sm">
               <Bell className="w-4 h-4" />
               Notifications
             </TabsTrigger>
@@ -138,7 +137,7 @@ export default function Settings() {
                     <div key={member.id} className="flex items-center justify-between p-4 rounded-lg bg-background border border-border">
                       <div className="flex items-center gap-3">
                         <Avatar>
-                          <AvatarFallback className="bg-primary/10 text-primary">
+                          <AvatarFallback className="bg-accent text-accent-foreground">
                             {member.name.split(' ').map(n => n[0]).join('')}
                           </AvatarFallback>
                         </Avatar>
@@ -169,7 +168,7 @@ export default function Settings() {
                 <CardDescription>Manage your subscription and billing information</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="p-6 rounded-lg bg-primary/10 border border-primary/20">
+                <div className="p-6 rounded-xl bg-accent border border-primary/20">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm text-muted-foreground">Current Plan</p>

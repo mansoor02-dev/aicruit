@@ -527,15 +527,16 @@ def start_interview(
             detail="No scheduled interview found for this application.",
         )
 
-    # ── 2. Validate time window (commented out for development) ──────────
-    # now = datetime.now(timezone.utc)
-    # scheduled_at = interview.scheduled_at
-    # if scheduled_at.tzinfo is None:
-    #     scheduled_at = scheduled_at.replace(tzinfo=timezone.utc)
-    # window_start = scheduled_at - timedelta(hours=1)
-    # window_end = scheduled_at + timedelta(hours=1)
-    # if not (window_start <= now <= window_end):
-    #     raise HTTPException(status_code=400, detail="...")
+    # ── 2. Enforce expiry window if set by auto-schedule ─────────────────
+    if interview.expires_at is not None:
+        now = datetime.now(timezone.utc)
+        exp = interview.expires_at
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        if now > exp:
+            interview.status = 'expired'
+            db.commit()
+            raise HTTPException(status_code=410, detail="Interview window expired")
 
     # ── 2b. Refuse if AI interview is disabled in settings ───────────────
     settings = _get_settings_for_interview(db, interview.id)

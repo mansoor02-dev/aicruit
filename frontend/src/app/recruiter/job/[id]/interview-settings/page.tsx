@@ -21,6 +21,7 @@ import {
 import { ArrowLeft, Loader2, Upload, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
+import { StageEditor } from '@/components/stages/StageEditor';
 
 type Difficulty = 'low' | 'medium' | 'high' | 'very_high' | 'varying';
 
@@ -97,7 +98,6 @@ export default function InterviewSettingsPage() {
   const [numberOfQuestions, setNumberOfQuestions] = useState<string>('');
   const [maxQuestions, setMaxQuestions] = useState<string>('');
   const [difficulty, setDifficulty] = useState<Difficulty | ''>('');
-  const [stages, setStages] = useState<string>('1');
 
   const { data, isLoading } = useQuery<InterviewSettings>({
     queryKey: ['interview-settings', id],
@@ -114,7 +114,6 @@ export default function InterviewSettingsPage() {
     setNumberOfQuestions(data.number_of_questions?.toString() ?? '');
     setMaxQuestions(data.max_questions?.toString() ?? '');
     setDifficulty((data.difficulty_level as Difficulty) ?? '');
-    setStages((data.interview_stages ?? 1).toString());
   }, [data]);
 
   const saveMutation = useMutation({
@@ -177,8 +176,6 @@ export default function InterviewSettingsPage() {
   };
 
   const validate = (): string | null => {
-    const stagesNum = parseInt(stages, 10);
-    if (!Number.isFinite(stagesNum) || stagesNum < 1) return 'Number of interview stages must be at least 1.';
     if (aiEnabled) {
       if (fixedCount) {
         const n = parseInt(numberOfQuestions, 10);
@@ -207,7 +204,6 @@ export default function InterviewSettingsPage() {
       max_questions:
         aiEnabled && !fixedCount ? parseInt(maxQuestions, 10) : null,
       difficulty_level: aiEnabled ? (difficulty || null) : null,
-      interview_stages: parseInt(stages, 10),
     });
   };
 
@@ -236,9 +232,9 @@ export default function InterviewSettingsPage() {
             </Link>
           </Button>
           <div className="flex-1">
-            <h1 className="text-2xl font-bold text-foreground">Interview Settings</h1>
+            <h1 className="text-3xl font-extrabold tracking-tight text-foreground">Interview Settings</h1>
             <p className="text-muted-foreground text-sm">
-              Configure how this job's interviews are conducted.
+              Configure how this job&apos;s interviews are conducted.
             </p>
           </div>
         </div>
@@ -388,18 +384,17 @@ export default function InterviewSettingsPage() {
         <Card className="bg-card border-border">
           <CardHeader>
             <CardTitle className="text-lg">Interview Process</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Add and order the stages candidates pass through. Drag to reorder. Click a name to rename.
+            </p>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-2 max-w-xs">
-              <Label htmlFor="interview_stages">Number of interview stages</Label>
-              <Input
-                id="interview_stages"
-                type="number"
-                min={1}
-                value={stages}
-                onChange={(e) => setStages(e.target.value)}
-              />
-            </div>
+            {aiEnabled && (
+              <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900 mb-3">
+                Use Auto-schedule on the candidates board to assign AI interviews to days.
+              </div>
+            )}
+            <StageEditor jobId={String(id)} />
           </CardContent>
         </Card>
 

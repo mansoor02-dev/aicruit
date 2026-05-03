@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+﻿from pydantic import BaseModel
 from typing import Optional
 
 
@@ -7,3 +7,4 @@ class FileUploadResponse(BaseModel):
     file_url: str
     message: Optional[str] = None
     id: Optional[str] = None
+    public_url: Optional[str] = None

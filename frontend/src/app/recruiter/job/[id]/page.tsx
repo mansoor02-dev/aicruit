@@ -22,11 +22,9 @@ import {
   Briefcase,
   DollarSign,
   Calendar as CalendarIcon,
-  FileText,
   Edit,
   Settings,
   XCircle,
-  Download,
   Loader2
 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -34,20 +32,12 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { api } from '@/lib/api';
+import { KanbanBoard } from '@/components/kanban/KanbanBoard';
 
 interface ApplicantInfo {
   application_id: string;
   application_status: string;
-  ai_match_score: number;
   applied_at: string;
   candidate_id: string;
   candidate_name: string;
@@ -84,29 +74,11 @@ interface JobDetail {
   applicants?: ApplicantInfo[];
 }
 
-const statusColumns = ['APPLIED', 'SCREENING', 'INTERVIEW_SCHEDULED', 'OFFERED', 'REJECTED']; // Kept just in case we need filtering later, but UI is now list mode
-const statusLabels: Record<string, string> = {
-  'APPLIED': 'Applied',
-  'SCREENING': 'Screening',
-  'INTERVIEW_SCHEDULED': 'Interview Scheduled',
-  'INTERVIEW_COMPLETED': 'Interview Completed',
-  'OFFERED': 'Offered',
-  'REJECTED': 'Rejected'
-};
-
-const statusColors: Record<string, string> = {
-  'APPLIED': 'bg-gray-500/20 text-gray-500 border-gray-500/30',
-  'SCREENING': 'bg-blue-500/20 text-blue-500 border-blue-500/30',
-  'INTERVIEW_SCHEDULED': 'bg-yellow-500/20 text-yellow-500 border-yellow-500/30',
-  'INTERVIEW_COMPLETED': 'bg-indigo-500/20 text-indigo-500 border-indigo-500/30',
-  'OFFERED': 'bg-green-500/20 text-green-500 border-green-500/30',
-  'REJECTED': 'bg-red-500/20 text-red-500 border-red-500/30'
-};
-
 export default function JobDetails() {
   const params = useParams();
   const id = params.id as string;
   const [job, setJob] = useState<JobDetail | null>(null);
+  const [aiInterviewEnabled, setAiInterviewEnabled] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
   const [selectedApplicant, setSelectedApplicant] = useState<ApplicantInfo | null>(null);
   const [interviewDate, setInterviewDate] = useState<Date>();
@@ -139,6 +111,12 @@ export default function JobDetails() {
           type: response.type,
           experience_level: response.experience_level
         });
+        try {
+          const settings: { ai_interview_enabled?: boolean } = await api.get(`/job/${id}/interview-settings`);
+          setAiInterviewEnabled(Boolean(settings?.ai_interview_enabled));
+        } catch {
+          setAiInterviewEnabled(false);
+        }
       } catch (error) {
         console.error('Failed to fetch job details:', error);
         toast({
@@ -168,7 +146,7 @@ export default function JobDetails() {
     return (
       <RecruiterLayout>
         <div className="text-center py-12">
-          <p className="text-muted-foreground">Job not found</p>
+          <p className="text-muted-foreground mt-1">Job not found</p>
           <Button asChild className="mt-4">
             <Link href="/recruiter/job">Back to Jobs</Link>
           </Button>
@@ -176,12 +154,6 @@ export default function JobDetails() {
       </RecruiterLayout>
     );
   }
-
-  const getScoreColor = (score: number) => {
-    if (score >= 85) return 'text-green-500';
-    if (score >= 70) return 'text-yellow-500';
-    return 'text-destructive';
-  };
 
   // Safe derived values to avoid undefined errors
   const applicants = job?.applicants ?? [];
@@ -277,7 +249,7 @@ export default function JobDetails() {
             </Link>
           </Button>
           <div className="flex-1">
-            <h1 className="text-2xl font-bold text-foreground">{job.title}</h1>
+            <h1 className="text-3xl font-extrabold tracking-tight text-foreground">{job.title}</h1>
             <div className="flex items-center gap-4 mt-1 text-muted-foreground flex-wrap">
               <span className="flex items-center gap-1">
                 <MapPin className="w-4 h-4" />
@@ -333,7 +305,7 @@ export default function JobDetails() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Status</p>
-                <Badge className="bg-green-500/20 text-green-500 border-green-500/30">{job.status}</Badge>
+                <Badge className="bg-success/15 text-success border-success/25">{job.status}</Badge>
               </div>
             </div>
             {requiredSkills.length > 0 && (
@@ -349,85 +321,10 @@ export default function JobDetails() {
           </CardContent>
         </Card>
 
-        {/* Applicants List */}
+        {/* Applicants Kanban Board */}
         <div>
           <h2 className="text-xl font-semibold mb-4">Applicants</h2>
-          <div className="bg-card border-border rounded-lg border overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Candidate</TableHead>
-                  <TableHead>Match Score</TableHead>
-                  <TableHead>Applied Date</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {applicants.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                      No applicants yet
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  applicants.map((applicant) => (
-                    <TableRow key={applicant.application_id} className="cursor-pointer hover:bg-muted/50" onClick={() => router.push(`/recruiter/job/${id}/candidate/${applicant.application_id}`)}>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium text-primary hover:underline">{applicant.candidate_name}</p>
-                          <p className="text-xs text-muted-foreground">{applicant.candidate_email}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className={cn("font-medium", getScoreColor(applicant.ai_match_score))}>
-                          {applicant.ai_match_score}%
-                        </span>
-                      </TableCell>
-                      <TableCell>{safeFormatDate(applicant.applied_at)}</TableCell>
-                      <TableCell>
-                        <Badge 
-                          variant="outline" 
-                          className={cn("whitespace-nowrap", statusColors[applicant.application_status] || "bg-secondary text-secondary-foreground")}
-                        >
-                          {statusLabels[applicant.application_status] || applicant.application_status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            asChild
-                          >
-                            <a href={applicant.resume_url} target="_blank" rel="noopener noreferrer">
-                              <Download className="w-4 h-4 mr-2" />
-                              <span className="sr-only sm:not-sr-only">Resume</span>
-                            </a>
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() => setSelectedApplicant(applicant)}
-                          >
-                            <CalendarIcon className="w-4 h-4 mr-2" />
-                            <span className="sr-only sm:not-sr-only">Schedule</span>
-                          </Button>
-                          {applicant.application_status === 'INTERVIEW_COMPLETED' && (
-                            <Button size="sm" variant="secondary" asChild>
-                              <Link href={`/recruiter/interview-details/${applicant.application_id}`}>
-                                <FileText className="w-4 h-4 mr-2" />
-                                Details
-                              </Link>
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+          <KanbanBoard jobId={String(id)} aiInterviewEnabled={aiInterviewEnabled} />
         </div>
 
         {/* Schedule Interview Dialog */}

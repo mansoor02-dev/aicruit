@@ -5,4 +5,4 @@ nixPkgs = ["python311"]
 cmds = ["pip install -r requirements.txt"]
 
 [start]
-cmd = "gunicorn main:app -k uvicorn.workers.UvicornWorker -w 2 -b 0.0.0.0:$PORT"
+cmd = "gunicorn -k uvicorn.workers.UvicornWorker -w 2 -b 0.0.0.0:$PORT main:app"

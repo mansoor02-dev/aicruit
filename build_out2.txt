@@ -1,0 +1,6 @@
+
+> harvest-ai-hire@0.0.0 build
+> next build
+
+  ▲ Next.js 14.2.35
+

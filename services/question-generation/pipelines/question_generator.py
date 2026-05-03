@@ -1,4 +1,4 @@
-import json
+﻿import json
 import random
 import re
 import sys
@@ -7,6 +7,7 @@ from typing import Dict, List, Optional, Tuple
 sys.path.insert(0, "/app")
 
 from shared.llm_client import LLMClient
+from pipelines.llm_loader import LLMLoader
 
 _FOLLOWUP_ANGLE_MAP = {
     "deep_dive": "implementation_details",
@@ -34,9 +35,9 @@ _FALLBACK_TEMPLATES: Dict[str, List[str]] = {
 _CONVERSATIONAL_PREFIXES = ["", "I'd like to know: "]
 
 _DIFFICULTY_GUIDANCE = {
-    "easy":   "easy difficulty — single-concept, simple vocabulary, max 15 words, no compound parts",
-    "medium": "medium difficulty — requires brief explanation, max 20 words, 1-2 parts at most",
-    "hard":   "hard difficulty — probes deep understanding or trade-offs, max 25 words",
+    "easy":   "easy difficulty â€” single-concept, simple vocabulary, max 15 words, no compound parts",
+    "medium": "medium difficulty â€” requires brief explanation, max 20 words, 1-2 parts at most",
+    "hard":   "hard difficulty â€” probes deep understanding or trade-offs, max 25 words",
 }
 
 _DIFFICULTY_WORD_LIMIT = {
@@ -47,7 +48,7 @@ _DIFFICULTY_WORD_LIMIT = {
 
 
 class QuestionGenerator:
-    """Generates interview questions — new topics and contextual follow-ups."""
+    """Generates interview questions â€” new topics and contextual follow-ups."""
 
     def __init__(
         self,
@@ -177,7 +178,7 @@ class QuestionGenerator:
         category: str
     ) -> Tuple[str, Dict]:
         """
-        Generate the FIRST question for a category — always a general, easy
+        Generate the FIRST question for a category â€” always a general, easy
         dataset question with no resume personalisation.  This warms the
         candidate up on the topic before contextual / resume-linked questions
         are introduced in the follow-on turns.
@@ -295,7 +296,7 @@ class QuestionGenerator:
             "You are a senior technical interviewer.\n"
             f"Difficulty level: {difficulty_guide}\n"
             "Your job is to ask questions that are SPECIFICALLY tied to the candidate's\n"
-            "own projects, skills, or work experience — not generic textbook questions.\n\n"
+            "own projects, skills, or work experience â€” not generic textbook questions.\n\n"
             f"Candidate Background:\n{resume_snippet}"
         )
         user_prompt = (
@@ -304,10 +305,10 @@ class QuestionGenerator:
             f"Difficulty: {difficulty}\n\n"
             "Generate ONE interview question that:\n"
             "- Directly references a specific project, skill, or experience from the candidate's resume\n"
-            "- Asks HOW or WHERE they applied the concept, e.g. 'In your [project], how did you handle…'\n"
+            "- Asks HOW or WHERE they applied the concept, e.g. 'In your [project], how did you handleâ€¦'\n"
             f"- Is natural and conversational, strictly under {word_limit} words\n"
-            "- Matches the difficulty level above exactly — do NOT make it harder\n"
-            "- No preamble — just the question, ending with ?\n\n"
+            "- Matches the difficulty level above exactly â€” do NOT make it harder\n"
+            "- No preamble â€” just the question, ending with ?\n\n"
             "Question:"
         )
 
@@ -341,7 +342,7 @@ class QuestionGenerator:
             if isinstance(desc, list):
                 desc = "; ".join(desc)
             if title:
-                parts.append(f"Project – {title}: {desc[:200]}")
+                parts.append(f"Project â€“ {title}: {desc[:200]}")
 
         # Experience
         experience = resume_json.get("experience") or resume_json.get("Experience") or []
@@ -352,7 +353,7 @@ class QuestionGenerator:
             if isinstance(desc, list):
                 desc = "; ".join(desc)
             if role:
-                parts.append(f"Experience – {role} at {company}: {desc[:200]}")
+                parts.append(f"Experience â€“ {role} at {company}: {desc[:200]}")
 
         return "\n".join(parts)
 
@@ -400,9 +401,9 @@ class QuestionGenerator:
             "Generate ONE natural follow-up question that probes deeper.\n"
             "Rules:\n"
             "1. Directly related to the previous answer\n"
-            f"2. Max {word_limit} words — strictly enforce this\n"
+            f"2. Max {word_limit} words â€” strictly enforce this\n"
             "3. Conversational interview style\n"
-            "4. No preamble — just the question\n"
+            "4. No preamble â€” just the question\n"
             "5. End with ?\n\n"
             "Question:"
         )
