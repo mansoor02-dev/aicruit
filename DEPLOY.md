@@ -38,16 +38,63 @@ This enables required APIs (Cloud Run, Cloud SQL, Secret Manager, Artifact Regis
 
 ### 3. Bootstrap the database schema
 
-The Cloud SQL instance is empty. Apply `database/schema.sql` once:
+You need two tools: the **Cloud SQL Auth Proxy** (creates a local tunnel to Cloud SQL) and **psql** (Postgres client).
+
+**On Linux / WSL / mac:**
 
 ```sh
-# Option A: gcloud sql connect (simplest)
-gcloud sql connect aicruit-db --user=postgres --database=aicruit < database/schema.sql
+# 1. Install psql
+sudo apt-get update && sudo apt-get install -y postgresql-client    # WSL/Ubuntu
+# OR
+brew install libpq && brew link --force libpq                       # mac
 
-# Option B: Cloud SQL Auth Proxy (preferred for repeat use)
-# Download proxy: https://cloud.google.com/sql/docs/postgres/sql-proxy
-./cloud-sql-proxy $CLOUD_SQL_INSTANCE &
-psql "host=127.0.0.1 port=5432 user=postgres dbname=aicruit" -f database/schema.sql
+# 2. Download Cloud SQL Auth Proxy v2 (one-line installer)
+curl -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.13.0/cloud-sql-proxy.linux.amd64
+chmod +x cloud-sql-proxy
+
+# 3. Get the instance connection name
+export CLOUD_SQL_INSTANCE="$(gcloud sql instances describe aicruit-db --format='value(connectionName)')"
+echo "$CLOUD_SQL_INSTANCE"   # should print: PROJECT:REGION:aicruit-db
+
+# 4. Start the proxy in the background (listens on 127.0.0.1:5432)
+./cloud-sql-proxy "$CLOUD_SQL_INSTANCE" &
+PROXY_PID=$!
+
+# 5. Apply the schema (use the user/password you set in setup.sh)
+PGPASSWORD="$DB_PASSWORD" psql "host=127.0.0.1 port=5432 user=aicruit dbname=aicruit" -f database/schema.sql
+
+# 6. Stop the proxy
+kill $PROXY_PID
+```
+
+**On Windows PowerShell:**
+
+```powershell
+# 1. Install psql via Postgres official installer (https://www.postgresql.org/download/windows/)
+#    OR via chocolatey: choco install postgresql
+# Make sure psql is on PATH.
+
+# 2. Download Cloud SQL Auth Proxy v2 for Windows
+Invoke-WebRequest -Uri "https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.13.0/cloud-sql-proxy.x64.exe" -OutFile "cloud-sql-proxy.exe"
+
+# 3. Get instance connection name
+$env:CLOUD_SQL_INSTANCE = (gcloud sql instances describe aicruit-db --format='value(connectionName)')
+
+# 4. Start proxy (in a separate terminal — leave it running)
+.\cloud-sql-proxy.exe $env:CLOUD_SQL_INSTANCE
+
+# 5. In your original terminal, apply schema
+$env:PGPASSWORD = "<your-db-password>"
+psql "host=127.0.0.1 port=5432 user=aicruit dbname=aicruit" -f database/schema.sql
+
+# 6. Stop the proxy (Ctrl+C in its terminal)
+```
+
+**Alternative (no install)** — if you'd rather not install psql/proxy locally, use Cloud Shell from the GCP console:
+
+```sh
+# In Cloud Shell, both tools are pre-installed
+gcloud sql connect aicruit-db --user=aicruit --database=aicruit < database/schema.sql
 ```
 
 ### 4. Seed secrets
@@ -189,16 +236,16 @@ Without this step, the browser blocks every request with a CORS error.
 
 ## Cost expectations
 
-| Component | Idle | Light traffic |
-|---|---|---|
-| Cloud Run (7 services) | $0 (scales to zero) | $0-5/mo |
-| Cloud SQL (db-f1-micro) | ~$10/mo | ~$10/mo |
-| GCS | $0 | <$1/mo |
-| Secret Manager | $0 | <$1/mo |
-| Cloud TTS | $0 (4M chars free/mo) | $0 |
-| Artifact Registry | $0 | <$1/mo |
-| Vercel (frontend) | $0 | $0 |
-| **Total** | **~$10/mo** | **~$10-20/mo** |
+| Component               | Idle                                     | Light traffic |
+| ----------------------- | ---------------------------------------- | ------------- |
+| Cloud Run (7 services)  | $0 (scales to zero) | $0-5/mo            |               |
+| Cloud SQL (db-f1-micro) | ~$10/mo | ~$10/mo                        |               |
+| GCS                     | $0 | <$1/mo                              |               |
+| Secret Manager          | $0 | <$1/mo                              |               |
+| Cloud TTS               | $0 (4M chars free/mo) | $0               |               |
+| Artifact Registry       | $0 | <$1/mo                              |               |
+| Vercel (frontend)       | $0 | $0                                  |               |
+| **Total**         | **~$10/mo** | **~$10-20/mo** |               |
 
 The fixed cost is essentially Cloud SQL. Everything else scales to zero.
 

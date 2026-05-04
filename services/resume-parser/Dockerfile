@@ -21,4 +21,4 @@ ENV GEMINI_API_KEY=""
 
 EXPOSE 8006
 
-CMD ["gunicorn", "app.api:app", "-k", "uvicorn.workers.UvicornWorker", "-w", "2", "-b", "0.0.0.0:8006"]
+CMD ["sh", "-c", "gunicorn app.api:app -k uvicorn.workers.UvicornWorker -w 2 -b 0.0.0.0:${PORT:-8006}"]

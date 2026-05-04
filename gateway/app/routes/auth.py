@@ -18,8 +18,8 @@ router = APIRouter()
 secret_keys = SecretKeys()
 COGNITO_CLIENT_ID = secret_keys.COGNITO_CLIENT_ID
 COGNITO_CLIENT_SECRET = secret_keys.COGNITO_CLIENT_SECRET
-REGION_NAME = secret_keys.REGION_NAME
-USER_POOL_ID = secret_keys.USER_POOL_ID
+REGION_NAME = secret_keys.COGNITO_REGION
+USER_POOL_ID = secret_keys.COGNITO_USER_POOL_ID
 
 cognito_client = boto3.client("cognito-idp", region_name=REGION_NAME)
 

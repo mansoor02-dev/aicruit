@@ -13,4 +13,4 @@ COPY . .
 
 EXPOSE 8010
 
-CMD ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "-w", "2", "-b", "0.0.0.0:8010", "--chdir", "app", "main:app"]
+CMD ["sh", "-c", "gunicorn -k uvicorn.workers.UvicornWorker -w 2 -b 0.0.0.0:${PORT:-8010} --chdir app main:app"]

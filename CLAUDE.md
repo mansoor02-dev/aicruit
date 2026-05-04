@@ -1,4 +1,4 @@
-# CLAUDE.md
+# _CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -22,18 +22,18 @@ This is a polyrepo-in-monorepo for **AIcruit** (a.k.a. "Harvest AI Hire"), an AI
 
 The gateway is the single front door; it fans out to microservices over HTTP via `httpx`. Service URLs are injected as env vars (`*_URL`) so the same code runs against Docker hostnames locally and Railway URLs in prod.
 
-| Service                 | Port | Role                                                                   |
-| ----------------------- | ---- | ---------------------------------------------------------------------- |
-| `frontend`            | 3000 | Next.js UI (calls gateway only)                                        |
-| `gateway`             | 8000 | API gateway:`/auth/*` (Cognito), `/job/*`, `/interview/*`        |
-| `file-service`        | 8005 | File uploads; serves files at `/static/...` (uploads dir mounted in) |
+| Service                 | Port | Role                                                                    |
+| ----------------------- | ---- | ----------------------------------------------------------------------- |
+| `frontend`            | 3000 | Next.js UI (calls gateway only)                                         |
+| `gateway`             | 8000 | API gateway:`/auth/*` (Cognito), `/job/*`, `/interview/*`         |
+| `file-service`        | 8005 | File uploads; serves files at `/static/...` (uploads dir mounted in)  |
 | `resume-parser`       | 8006 | PDF/DOCX -> structured JSON via Gemini API                              |
 | `transcribe-audio`    | 8007 | Groq Whisper API: audio -> transcript                                   |
 | `question-generation` | 8010 | LLM (OpenRouter) Q&A; embeddings via Gemini gemini-embedding-001 (768d) |
 | `text-to-speech`      | 8011 | Google Cloud TTS API: synthesizes the question audio                    |
-| `report-generation`   | 8012 | LLM-powered final interview reports (recruiter + candidate views)      |
-| `postgres`            | 5432 | Primary datastore                                                      |
-| `pgadmin`             | 5050 | Admin UI (`admin@aicruit.com` / `admin123` in compose)             |
+| `report-generation`   | 8012 | LLM-powered final interview reports (recruiter + candidate views)       |
+| `postgres`            | 5432 | Primary datastore                                                       |
+| `pgadmin`             | 5050 | Admin UI (`admin@aicruit.com` / `admin123` in compose)              |
 
 ## Architecture: data & control flow
 
