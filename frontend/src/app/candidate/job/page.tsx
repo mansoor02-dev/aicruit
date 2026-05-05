@@ -1,9 +1,9 @@
 ﻿'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { CandidateLayout } from '@/components/layout/CandidateLayout';
-import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import {
@@ -13,8 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ApplyJobModal } from '@/components/ApplyJobModal';
-import { mockJobs, Job } from '@/data/mockData';
+import { Job } from '@/data/mockData';
 import {
   MapPin,
   Briefcase,
@@ -24,7 +23,6 @@ import {
   Building2,
   Loader2
 } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
 
 type ApplicationQuestionType = "text" | "textarea" | "number" | "date" | "select" | "yes_no" | "email" | "url";
@@ -67,12 +65,6 @@ export default function CandidateJobs() {
   const [searchTerm, setSearchTerm] = useState('');
   const [locationFilter, setLocationFilter] = useState('all');
   const [experienceFilter, setExperienceFilter] = useState('all');
-  const [appliedJobs, setAppliedJobs] = useState<string[]>([]);
-  const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
-  const [selectedJobForApply, setSelectedJobForApply] = useState<{ id: string; title: string; application_questions?: ApplicationQuestion[] } | null>(null);
-  const { toast } = useToast();
-
-  const [jobQuestionsById, setJobQuestionsById] = useState<Record<string, ApplicationQuestion[]>>({});
 
   const fetchJobs = async () => {
     try {
@@ -99,11 +91,6 @@ export default function CandidateJobs() {
         }));
       console.log('Mapped jobs:', mappedJobs);
       setJobs(mappedJobs);
-      const qmap: Record<string, ApplicationQuestion[]> = {};
-      for (const j of response) {
-        qmap[j.id] = j.application_questions || [];
-      }
-      setJobQuestionsById(qmap);
     } catch (error) {
       console.error('Failed to fetch jobs:', error);
       // Don't show toast for now, just log
@@ -134,17 +121,6 @@ export default function CandidateJobs() {
     const matchesExperience = experienceFilter === 'all' || job.experienceLevel === experienceFilter;
     return matchesSearch && matchesLocation && matchesExperience;
   });
-
-  const handleApply = (jobId: string, jobTitle: string) => {
-    setSelectedJobForApply({ id: jobId, title: jobTitle, application_questions: jobQuestionsById[jobId] || [] });
-    setIsApplyModalOpen(true);
-  };
-
-  const handleApplySuccess = () => {
-    if (selectedJobForApply) {
-      setAppliedJobs(prev => [...prev, selectedJobForApply.id]);
-    }
-  };
 
   if (!mounted) {
     return (
@@ -236,9 +212,6 @@ export default function CandidateJobs() {
                       <div className="h-6 w-20 bg-muted rounded animate-pulse" />
                     </div>
                   </CardContent>
-                  <CardFooter>
-                    <div className="h-10 w-full bg-muted rounded animate-pulse" />
-                  </CardFooter>
                 </Card>
               );
             })
@@ -249,78 +222,59 @@ export default function CandidateJobs() {
           ) : (
             filteredJobs.map((job) => {
               return (
-                <Card key={job.id} className="bg-card border-border hover:shadow-lg transition-all">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between">
-                      <div className="p-2 bg-primary/10 rounded-lg">
-                        <Building2 className="w-6 h-6 text-primary" />
+                <Link
+                  key={job.id}
+                  href={`/candidate/job/${job.id}`}
+                  className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-lg"
+                >
+                  <Card className="bg-card border-border hover:shadow-lg hover:border-primary/30 transition-all cursor-pointer h-full">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between">
+                        <div className="p-2 bg-primary/10 rounded-lg">
+                          <Building2 className="w-6 h-6 text-primary" />
+                        </div>
+                        <Badge variant="secondary">{job.type}</Badge>
                       </div>
-                      <Badge variant="secondary">{job.type}</Badge>
-                    </div>
-                    <div className="pt-3">
-                      <h3 className="text-lg font-semibold text-foreground">{job.title}</h3>
-                      <p className="text-muted-foreground mt-1">{job.company}</p>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <MapPin className="w-4 h-4" />
-                      {job.location}
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Briefcase className="w-4 h-4" />
-                      {job.experienceLevel}
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <DollarSign className="w-4 h-4" />
-                      ${job.salaryMin.toLocaleString()} - ${job.salaryMax.toLocaleString()}
-                    </div>
-                    <div className="flex flex-wrap gap-2 pt-2">
-                      {job.requiredSkills.slice(0, 3).map((skill) => {
-                        return (
-                          <Badge key={skill} variant="outline" className="text-xs">
-                            {skill}
+                      <div className="pt-3">
+                        <h3 className="text-lg font-semibold text-foreground">{job.title}</h3>
+                        <p className="text-muted-foreground mt-1">{job.company}</p>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <MapPin className="w-4 h-4" />
+                        {job.location}
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Briefcase className="w-4 h-4" />
+                        {job.experienceLevel}
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <DollarSign className="w-4 h-4" />
+                        ${job.salaryMin.toLocaleString()} - ${job.salaryMax.toLocaleString()}
+                      </div>
+                      <div className="flex flex-wrap gap-2 pt-2">
+                        {job.requiredSkills.slice(0, 3).map((skill) => {
+                          return (
+                            <Badge key={skill} variant="outline" className="text-xs">
+                              {skill}
+                            </Badge>
+                          );
+                        })}
+                        {job.requiredSkills.length > 3 && (
+                          <Badge variant="outline" className="text-xs">
+                            +{job.requiredSkills.length - 3}
                           </Badge>
-                        );
-                      })}
-                      {job.requiredSkills.length > 3 && (
-                        <Badge variant="outline" className="text-xs">
-                          +{job.requiredSkills.length - 3}
-                        </Badge>
-                      )}
-                    </div>
-                  </CardContent>
-                  <CardFooter>
-                    {appliedJobs.includes(job.id) ? (
-                      <Button disabled className="w-full" variant="secondary">
-                        Applied
-                      </Button>
-                    ) : (
-                      <Button
-                        className="w-full"
-                        onClick={() => handleApply(job.id, job.title)}
-                      >
-                        Quick Apply
-                      </Button>
-                    )}
-                  </CardFooter>
-                </Card>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
               );
             })
           )}
         </div>
       </div>
-
-      {selectedJobForApply && (
-        <ApplyJobModal
-          jobId={selectedJobForApply.id}
-          jobTitle={selectedJobForApply.title}
-          applicationQuestions={selectedJobForApply.application_questions || []}
-          isOpen={isApplyModalOpen}
-          onClose={() => setIsApplyModalOpen(false)}
-          onApplySuccess={handleApplySuccess}
-        />
-      )}
     </CandidateLayout>
   );
 }

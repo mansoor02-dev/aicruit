@@ -1,8 +1,7 @@
-﻿'use client';
+'use client';
 
 import { RecruiterLayout } from '@/components/layout/RecruiterLayout';
 import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -14,47 +13,87 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { mockApplicants, mockJobs } from '@/data/mockData';
-import { Search, FileText, Mail, Users } from 'lucide-react';
+import { Search, Users, Loader2 } from 'lucide-react';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
+import { api } from '@/lib/api';
+
+interface AllCandidateRow {
+  application_id: string;
+  candidate_id: string;
+  name: string;
+  email: string;
+  phone: string;
+  location: string;
+  job_id: string;
+  job_title: string;
+  status: string;
+  ai_match_score: number | null;
+  interview_id: string | null;
+  interview_status: string | null;
+  applied_at: string;
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  APPLIED: 'Applied',
+  SCREENING: 'Screening',
+  INTERVIEW_SCHEDULED: 'Interview Scheduled',
+  INTERVIEW_COMPLETED: 'Interview Completed',
+  OFFERED: 'Offered',
+  REJECTED: 'Rejected',
+};
 
 export default function Candidates() {
   const [searchTerm, setSearchTerm] = useState('');
+  const router = useRouter();
 
-  const candidatesWithJobs = mockApplicants.map(applicant => ({
-    ...applicant,
-    job: mockJobs.find(j => j.id === applicant.jobId),
-  }));
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ['all-candidates'],
+    queryFn: () => api.get<AllCandidateRow[]>('/job/candidates/all'),
+  });
 
-  const filteredCandidates = candidatesWithJobs.filter(c =>
-    c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.job?.title.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const candidates = data ?? [];
+  const filtered = candidates.filter((c) => {
+    const q = searchTerm.toLowerCase();
+    return (
+      c.name.toLowerCase().includes(q) ||
+      c.email.toLowerCase().includes(q) ||
+      c.job_title.toLowerCase().includes(q)
+    );
+  });
 
   const getStatusBadge = (status: string) => {
+    const label = STATUS_LABELS[status] ?? status;
     switch (status) {
-      case 'Applied':
-        return <Badge variant="outline">Applied</Badge>;
-      case 'Screening':
-        return <Badge variant="soft">Screening</Badge>;
-      case 'Interview':
-        return <Badge variant="warning">Interview</Badge>;
-      case 'Offered':
-        return <Badge variant="success">Offered</Badge>;
-      case 'Rejected':
-        return <Badge variant="destructive">Rejected</Badge>;
+      case 'APPLIED':
+        return <Badge variant="outline">{label}</Badge>;
+      case 'SCREENING':
+        return <Badge className="bg-primary/15 text-primary border-primary/25">{label}</Badge>;
+      case 'INTERVIEW_SCHEDULED':
+        return <Badge className="bg-warning/20 text-warning-foreground border-warning/30">{label}</Badge>;
+      case 'INTERVIEW_COMPLETED':
+        return <Badge className="bg-indigo-500/20 text-indigo-400 border-indigo-500/30">{label}</Badge>;
+      case 'OFFERED':
+        return <Badge className="bg-success/15 text-success border-success/25">{label}</Badge>;
+      case 'REJECTED':
+        return <Badge variant="destructive">{label}</Badge>;
       default:
-        return <Badge variant="secondary">{status}</Badge>;
+        return <Badge variant="secondary">{label}</Badge>;
     }
   };
 
-  const getScoreColor = (score: number) => {
+  const getScoreColor = (score: number | null) => {
+    if (score == null) return 'text-muted-foreground';
     if (score >= 85) return 'text-success';
     if (score >= 70) return 'text-warning-foreground';
     return 'text-destructive';
+  };
+
+  const handleRowClick = (row: AllCandidateRow) => {
+    router.push(`/recruiter/job/${row.job_id}/candidate/${row.application_id}`);
   };
 
   return (
@@ -63,11 +102,13 @@ export default function Candidates() {
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-3xl font-extrabold tracking-tight text-foreground">All Candidates</h1>
-            <p className="text-muted-foreground mt-1">View and manage all applicants across your job postings</p>
+            <p className="text-muted-foreground mt-1">
+              View and manage all applicants across your job postings
+            </p>
           </div>
           <Badge variant="soft" className="text-sm py-1.5 px-3">
             <Users className="w-3.5 h-3.5 mr-1.5" />
-            {filteredCandidates.length} candidate{filteredCandidates.length === 1 ? '' : 's'}
+            {filtered.length} candidate{filtered.length === 1 ? '' : 's'}
           </Badge>
         </div>
 
@@ -83,62 +124,80 @@ export default function Candidates() {
 
         <Card className="bg-card border-border overflow-hidden">
           <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/40 hover:bg-muted/40">
-                  <TableHead>Candidate</TableHead>
-                  <TableHead>Applied For</TableHead>
-                  <TableHead>AI Match</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Applied Date</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredCandidates.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={6} className="py-12 text-center text-muted-foreground">
-                      No candidates match your search.
-                    </TableCell>
+            {isLoading ? (
+              <div className="flex items-center justify-center py-16 text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                Loading candidates...
+              </div>
+            ) : isError ? (
+              <div className="py-12 text-center text-destructive text-sm">
+                Failed to load candidates: {error instanceof Error ? error.message : 'Unknown error'}
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/40 hover:bg-muted/40">
+                    <TableHead>Candidate</TableHead>
+                    <TableHead>Applied For</TableHead>
+                    <TableHead>AI Match</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Applied Date</TableHead>
                   </TableRow>
-                )}
-                {filteredCandidates.map((candidate, idx) => (
-                  <TableRow key={candidate.id} className="animate-fade-in-up transition-colors" style={{ animationDelay: `${Math.min(idx * 30, 400)}ms` } as React.CSSProperties}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <Avatar className="ring-2 ring-primary/15">
-                          <AvatarFallback className="bg-accent text-accent-foreground font-semibold">
-                            {candidate.name.split(' ').map(n => n[0]).join('')}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="font-semibold">{candidate.name}</p>
-                          <p className="text-sm text-muted-foreground">{candidate.email}</p>
+                </TableHeader>
+                <TableBody>
+                  {filtered.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="py-12 text-center text-muted-foreground">
+                        No candidates match your search.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {filtered.map((c, idx) => (
+                    <TableRow
+                      key={c.application_id}
+                      onClick={() => handleRowClick(c)}
+                      className="cursor-pointer animate-fade-in-up transition-colors hover:bg-muted/40"
+                      style={{ animationDelay: `${Math.min(idx * 30, 400)}ms` } as React.CSSProperties}
+                    >
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <Avatar className="ring-2 ring-primary/15">
+                            <AvatarFallback className="bg-accent text-accent-foreground font-semibold">
+                              {c.name
+                                .split(' ')
+                                .map((n) => n[0])
+                                .filter(Boolean)
+                                .join('')
+                                .toUpperCase()
+                                .slice(0, 2)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="font-semibold">{c.name || '(no name)'}</p>
+                            <p className="text-sm text-muted-foreground">{c.email}</p>
+                          </div>
                         </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-sm">{candidate.job?.title || 'Unknown'}</TableCell>
-                    <TableCell>
-                      <span className={cn('font-semibold tabular-nums', getScoreColor(candidate.aiMatchScore))}>
-                        {candidate.aiMatchScore}%
-                      </span>
-                    </TableCell>
-                    <TableCell>{getStatusBadge(candidate.status)}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{format(parseISO(candidate.appliedAt), 'MMM d, yyyy')}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button variant="ghost" size="icon" aria-label="View resume">
-                          <FileText className="w-4 h-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" aria-label="Email candidate">
-                          <Mail className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                      </TableCell>
+                      <TableCell className="text-sm">{c.job_title}</TableCell>
+                      <TableCell>
+                        <span
+                          className={cn(
+                            'font-semibold tabular-nums',
+                            getScoreColor(c.ai_match_score),
+                          )}
+                        >
+                          {c.ai_match_score != null ? `${c.ai_match_score}%` : '—'}
+                        </span>
+                      </TableCell>
+                      <TableCell>{getStatusBadge(c.status)}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {c.applied_at ? format(new Date(c.applied_at), 'MMM d, yyyy') : '—'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
       </div>

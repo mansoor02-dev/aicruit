@@ -34,6 +34,8 @@ export interface Application {
   job_status: string;
   job_created_at: string;
   scheduled_at?: string;
+  interview_id?: string | null;
+  interview_status?: 'scheduled' | 'in_progress' | 'completed' | 'cancelled' | 'expired' | null;
 }
 
 export default function Applications() {
@@ -69,7 +71,24 @@ export default function Applications() {
     fetchApplications();
   }, [mounted, toast]);
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (app: Application) => {
+    const status = app.application_status;
+    const interviewStatus = app.interview_status;
+    if (
+      status === 'INTERVIEW_COMPLETED' ||
+      interviewStatus === 'completed'
+    ) {
+      return <Badge className="bg-success/15 text-success border-success/25">Interview Completed</Badge>;
+    }
+    if (interviewStatus === 'expired') {
+      return <Badge variant="destructive">Interview Expired</Badge>;
+    }
+    if (interviewStatus === 'cancelled') {
+      return <Badge variant="destructive">Interview Cancelled</Badge>;
+    }
+    if (interviewStatus === 'in_progress') {
+      return <Badge className="bg-warning/20 text-warning-foreground border-warning/30">Interview In Progress</Badge>;
+    }
     switch (status) {
       case 'APPLIED':
         return <Badge variant="outline">Applied</Badge>;
@@ -184,7 +203,7 @@ export default function Applications() {
                     </div>
 
                     <div className="flex flex-col items-end gap-3 flex-shrink-0">
-                      {getStatusBadge(application.application_status)}
+                      {getStatusBadge(application)}
                       <Button variant="outline" size="sm" asChild>
                         <Link href={`/candidate/applications/${application.application_id}`}>
                           View Details

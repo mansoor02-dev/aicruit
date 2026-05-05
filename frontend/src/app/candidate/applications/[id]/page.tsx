@@ -94,7 +94,26 @@ export default function ApplicationDetails() {
     window.open(`/candidate/interview/${application?.application_id}`, '_blank');
   };
 
-  const getStatusBadge = (status: string) => {
+  const interviewStatus = application?.interview_status ?? null;
+  const interviewDone =
+    interviewStatus === 'completed' ||
+    interviewStatus === 'expired' ||
+    interviewStatus === 'cancelled' ||
+    application?.application_status === 'INTERVIEW_COMPLETED';
+  const interviewInProgress = interviewStatus === 'in_progress';
+  const showJoinSection =
+    application &&
+    (application.application_status === 'INTERVIEW_SCHEDULED' || application.scheduled_at);
+
+  const getStatusBadge = (app: Application) => {
+    const status = app.application_status;
+    const iStatus = app.interview_status;
+    if (status === 'INTERVIEW_COMPLETED' || iStatus === 'completed') {
+      return <Badge className="bg-success/15 text-success border-success/25">Interview Completed</Badge>;
+    }
+    if (iStatus === 'expired') return <Badge variant="destructive">Interview Expired</Badge>;
+    if (iStatus === 'cancelled') return <Badge variant="destructive">Interview Cancelled</Badge>;
+    if (iStatus === 'in_progress') return <Badge className="bg-warning/20 text-warning-foreground border-warning/30">Interview In Progress</Badge>;
     switch (status) {
       case 'APPLIED':
         return <Badge variant="outline">Applied</Badge>;
@@ -159,18 +178,22 @@ export default function ApplicationDetails() {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              {getStatusBadge(application.application_status)}
+              {getStatusBadge(application)}
             </div>
           </div>
         </div>
 
         {/* Interview Section - Only if scheduled */}
-        {(application.application_status === 'INTERVIEW_SCHEDULED' || application.scheduled_at) && (
+        {showJoinSection && (
           <Card className="bg-primary/5 border-primary/20">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-primary">
                 <Video className="w-5 h-5" />
-                Interview Scheduled
+                {interviewDone
+                  ? 'Interview Completed'
+                  : interviewInProgress
+                    ? 'Interview In Progress'
+                    : 'Interview Scheduled'}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -179,22 +202,36 @@ export default function ApplicationDetails() {
                   <p className="text-sm text-muted-foreground">Date & Time</p>
                   <p className="text-lg font-semibold flex items-center gap-2">
                     <Calendar className="w-4 h-4" />
-                    {application.scheduled_at 
-                      ? format(new Date(application.scheduled_at), 'PPPPp') 
+                    {application.scheduled_at
+                      ? format(new Date(application.scheduled_at), 'PPPPp')
                       : 'Date to be confirmed'}
                   </p>
-                   <p className="text-xs text-muted-foreground mt-1">
+                  {!interviewDone && (
+                    <p className="text-xs text-muted-foreground mt-1">
                       Check-in allowed within 1 hour of scheduled time.
-                   </p>
+                    </p>
+                  )}
                 </div>
-                
-                <Button 
-                  size="lg" 
-                  onClick={handleStartInterview}
-                >
-                  <Video className="w-4 h-4 mr-2" />
-                  Join Interview
-                </Button>
+
+                {interviewDone ? (
+                  <Badge className="text-sm py-1.5 px-3 bg-success/15 text-success border-success/25">
+                    {interviewStatus === 'expired'
+                      ? 'Interview Expired'
+                      : interviewStatus === 'cancelled'
+                        ? 'Interview Cancelled'
+                        : 'Interview Completed - Awaiting Decision'}
+                  </Badge>
+                ) : interviewInProgress ? (
+                  <Button size="lg" onClick={handleStartInterview}>
+                    <Video className="w-4 h-4 mr-2" />
+                    Resume Interview
+                  </Button>
+                ) : (
+                  <Button size="lg" onClick={handleStartInterview}>
+                    <Video className="w-4 h-4 mr-2" />
+                    Join Interview
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>

@@ -1,13 +1,14 @@
 'use client';
 
 import * as React from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Download, ExternalLink, GripVertical } from 'lucide-react';
+import { Download, FileText, GripVertical } from 'lucide-react';
 
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { BoardCandidate } from '@/lib/api';
 
@@ -92,17 +93,38 @@ export function CandidateCard({ candidate, isOverlay }: CandidateCardProps) {
 
   const pill = candidate.interview ? pillFor(candidate.interview) : null;
   const jobId = React.useContext(KanbanJobIdContext);
+  const router = useRouter();
   const viewHref = jobId
     ? `/recruiter/job/${jobId}/candidate/${candidate.application_id}`
     : `/recruiter/applications/${candidate.application_id}`;
+
+  const interviewCompleted =
+    candidate.status === 'INTERVIEW_COMPLETED' ||
+    candidate.interview?.status === 'completed';
+  // The interview-details route is keyed by application_id (the gateway endpoint
+  // /interview/{application_id}/details). Use application_id, not interview.id.
+  const interviewDetailsKey = candidate.application_id;
+
+  const handleCardClick = (e: React.MouseEvent) => {
+    // Don't navigate if user is interacting with a button/link/etc.
+    const target = e.target as HTMLElement;
+    if (target.closest('button, a, [data-no-card-click="true"]')) return;
+    router.push(viewHref);
+  };
 
   return (
     <Card
       ref={setNodeRef}
       style={style}
       data-testid={`candidate-card-${candidate.application_id}`}
+      onClick={handleCardClick}
+      role="link"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') router.push(viewHref);
+      }}
       className={cn(
-        'p-3 mb-2 bg-card border shadow-sm cursor-default',
+        'p-3 mb-2 bg-card border shadow-sm cursor-pointer hover:border-primary/40 hover:shadow-md transition-all',
         isOverlay && 'shadow-lg',
       )}
     >
@@ -151,7 +173,7 @@ export function CandidateCard({ candidate, isOverlay }: CandidateCardProps) {
               </Badge>
             </div>
           )}
-          <div className="mt-2 flex items-center gap-3">
+          <div className="mt-2 flex items-center gap-3 flex-wrap">
             {candidate.resume_url && (
               <a
                 href={candidate.resume_url}
@@ -159,16 +181,26 @@ export function CandidateCard({ candidate, isOverlay }: CandidateCardProps) {
                 rel="noreferrer"
                 aria-label="Download resume"
                 className="text-muted-foreground hover:text-foreground"
+                onClick={(e) => e.stopPropagation()}
               >
                 <Download className="h-3.5 w-3.5" />
               </a>
             )}
-            <Link
-              href={viewHref}
-              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-            >
-              View <ExternalLink className="h-3 w-3" />
-            </Link>
+            {interviewCompleted && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-[11px]"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  router.push(`/recruiter/interview-details/${interviewDetailsKey}`);
+                }}
+              >
+                <FileText className="h-3 w-3 mr-1" />
+                Interview Details
+              </Button>
+            )}
           </div>
         </div>
       </div>

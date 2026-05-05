@@ -4,14 +4,12 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { RecruiterLayout } from '@/components/layout/RecruiterLayout';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import {
   ArrowLeft,
   HelpCircle,
-  User,
   Mail,
   Phone,
   MapPin,
@@ -23,12 +21,11 @@ import {
   Calendar,
   Loader2,
   FileText,
-  Camera,
-  AlertTriangle,
+  XCircle,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
-import { api } from '@/lib/api';
+import { api, apiRequest } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 interface Education {
@@ -90,22 +87,6 @@ interface ApplicationDetail {
   resume_url: string;
 }
 
-interface SnapshotItem {
-  id: string;
-  camera_url: string;
-  screen_url: string;
-  client_timestamp: number;
-  server_timestamp: number;
-  created_at: string | null;
-}
-
-interface SnapshotsResponse {
-  interview_id: string;
-  interview_status: string;
-  interview_started_at: string | null;
-  snapshots: SnapshotItem[];
-}
-
 const statusLabels: Record<string, string> = {
   'APPLIED': 'Applied',
   'SCREENING': 'Screening',
@@ -133,15 +114,7 @@ export default function CandidateDetailPage() {
 
   const [data, setData] = useState<ApplicationDetail | null>(null);
   const [loading, setLoading] = useState(true);
-
-  // Proctoring snapshots state
-  const [interviewId, setInterviewId] = useState<string | null>(null);
-  const [interviewStatus, setInterviewStatus] = useState<string | null>(null);
-  const [snapshots, setSnapshots] = useState<SnapshotsResponse | null>(null);
-  const [snapshotsLoading, setSnapshotsLoading] = useState(false);
-  const [interviewLookupAttempted, setInterviewLookupAttempted] = useState(false);
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
-  const [lightboxLabel, setLightboxLabel] = useState<string>('');
+  const [rejecting, setRejecting] = useState(false);
 
   useEffect(() => {
     const fetchDetail = async () => {
@@ -163,67 +136,30 @@ export default function CandidateDetailPage() {
     fetchDetail();
   }, [applicationId, toast]);
 
-  // Look up the interview tied to this application so we can fetch snapshots.
-  useEffect(() => {
-    if (!applicationId) return;
-    let cancelled = false;
-    const fetchInterview = async () => {
-      try {
-        const res = await api.get(`/interview/${applicationId}/details`);
-        if (cancelled) return;
-        if (res?.interview_id) {
-          setInterviewId(res.interview_id);
-          setInterviewStatus(res.status || null);
-        }
-      } catch (err) {
-        // No interview yet for this application — that's fine, just skip the gallery.
-        console.debug('No interview found for application', applicationId);
-      } finally {
-        if (!cancelled) setInterviewLookupAttempted(true);
-      }
-    };
-    fetchInterview();
-    return () => {
-      cancelled = true;
-    };
-  }, [applicationId]);
-
-  // Fetch proctoring snapshots once we know the underlying interview_id.
-  useEffect(() => {
-    if (!interviewId) return;
-    let cancelled = false;
-    const fetchSnapshots = async () => {
-      try {
-        setSnapshotsLoading(true);
-        const res = await api.get(`/snapshot/interview/${interviewId}`);
-        if (!cancelled) setSnapshots(res);
-      } catch (err) {
-        if (!cancelled) {
-          console.error('Failed to fetch snapshots', err);
-          setSnapshots({
-            interview_id: interviewId,
-            interview_status: interviewStatus || '',
-            interview_started_at: null,
-            snapshots: [],
-          });
-        }
-      } finally {
-        if (!cancelled) setSnapshotsLoading(false);
-      }
-    };
-    fetchSnapshots();
-    return () => {
-      cancelled = true;
-    };
-  }, [interviewId, interviewStatus]);
-
-  const formatRelativeOffset = (serverTimestampMs: number, startIso: string | null) => {
-    if (!startIso) return new Date(serverTimestampMs).toLocaleTimeString();
-    const start = new Date(startIso).getTime();
-    const offsetSec = Math.max(0, Math.round((serverTimestampMs - start) / 1000));
-    const m = Math.floor(offsetSec / 60);
-    const s = offsetSec % 60;
-    return `${m}m ${s.toString().padStart(2, '0')}s into interview`;
+  const handleReject = async () => {
+    if (!data) return;
+    if (!confirm('Reject this candidate? They will be moved to the Rejected lane.')) return;
+    try {
+      setRejecting(true);
+      await apiRequest(
+        `/job/${jobId}/applications/${data.application_id}/stage`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ rejected: true }),
+        },
+      );
+      toast({ title: 'Candidate rejected' });
+      router.push(`/recruiter/job/${jobId}`);
+    } catch (err) {
+      console.error('Reject failed', err);
+      toast({
+        title: 'Error',
+        description: 'Failed to reject candidate.',
+        variant: 'destructive',
+      });
+    } finally {
+      setRejecting(false);
+    }
   };
 
   if (loading) {
@@ -537,206 +473,32 @@ export default function CandidateDetailPage() {
           </Card>
         )}
 
-        {/* ===== Proctoring Snapshots ===== */}
-        {interviewLookupAttempted && interviewId && (() => {
-          const isCompleted = (interviewStatus || snapshots?.interview_status) === 'completed';
-          const items = snapshots?.snapshots ?? [];
-          const startIso = snapshots?.interview_started_at || null;
-
-          if (snapshotsLoading) {
-            return (
-              <Card className="bg-card border-border">
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <div className="p-1.5 rounded-md bg-primary/10">
-                      <Camera className="w-4 h-4 text-primary" />
-                    </div>
-                    Proctoring Snapshots
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Loader2 className="w-4 h-4 animate-spin" /> Loading snapshots…
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          }
-
-          if (items.length === 0) {
-            const warning = isCompleted;
-            return (
-              <Card
-                className={
-                  warning
-                    ? 'bg-warning/5 border-yellow-500/30'
-                    : 'bg-card border-border'
-                }
-              >
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    {warning ? (
-                      <AlertTriangle className="w-5 h-5 text-warning-foreground" />
-                    ) : (
-                      <div className="p-1.5 rounded-md bg-primary/10">
-                        <Camera className="w-4 h-4 text-primary" />
-                      </div>
-                    )}
-                    Proctoring Snapshots
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p
-                    className={
-                      warning ? 'text-warning-foreground text-sm' : 'text-muted-foreground text-sm'
-                    }
-                  >
-                    {warning
-                      ? 'No snapshots were captured for this completed interview. This may indicate a proctoring failure or that the candidate denied screen sharing.'
-                      : 'No snapshots captured.'}
-                  </p>
-                </CardContent>
-              </Card>
-            );
-          }
-
-          return (
-            <Card className="bg-card border-border">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <div className="p-1.5 rounded-md bg-primary/10">
-                    <Camera className="w-4 h-4 text-primary" />
-                  </div>
-                  Proctoring Snapshots
-                </CardTitle>
-                <CardDescription>
-                  Periodic camera and screen captures taken during the interview.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {items.map((snap) => {
-                    const label = formatRelativeOffset(snap.server_timestamp, startIso);
-                    return (
-                      <div
-                        key={snap.id}
-                        className="border rounded-lg overflow-hidden bg-muted/20"
-                      >
-                        <div className="grid grid-cols-2 gap-px bg-border">
-                          <div className="bg-black relative aspect-video">
-                            <button
-                              type="button"
-                              className="block w-full h-full"
-                              onClick={() => {
-                                setLightboxUrl(snap.camera_url);
-                                setLightboxLabel(`Camera — ${label}`);
-                              }}
-                              aria-label="View camera snapshot"
-                            >
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={snap.camera_url}
-                                alt={`Camera snapshot ${label}`}
-                                loading="lazy"
-                                className="w-full h-full object-cover"
-                              />
-                            </button>
-                            <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-black/70 text-white">
-                              CAM
-                            </span>
-                            <a
-                              href={snap.camera_url}
-                              download
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="absolute top-1 right-1 p-1 rounded bg-black/70 text-white hover:bg-black"
-                              aria-label="Download camera snapshot"
-                              title="Download"
-                            >
-                              <Download className="w-3.5 h-3.5" />
-                            </a>
-                          </div>
-                          <div className="bg-black relative aspect-video">
-                            <button
-                              type="button"
-                              className="block w-full h-full"
-                              onClick={() => {
-                                setLightboxUrl(snap.screen_url);
-                                setLightboxLabel(`Screen — ${label}`);
-                              }}
-                              aria-label="View screen snapshot"
-                            >
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={snap.screen_url}
-                                alt={`Screen snapshot ${label}`}
-                                loading="lazy"
-                                className="w-full h-full object-cover"
-                              />
-                            </button>
-                            <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-black/70 text-white">
-                              SCREEN
-                            </span>
-                            <a
-                              href={snap.screen_url}
-                              download
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="absolute top-1 right-1 p-1 rounded bg-black/70 text-white hover:bg-black"
-                              aria-label="Download screen snapshot"
-                              title="Download"
-                            >
-                              <Download className="w-3.5 h-3.5" />
-                            </a>
-                          </div>
-                        </div>
-                        <div className="px-3 py-2 text-xs text-muted-foreground">{label}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })()}
-
-        {/* Lightbox */}
-        <Dialog
-          open={!!lightboxUrl}
-          onOpenChange={(open) => {
-            if (!open) {
-              setLightboxUrl(null);
-              setLightboxLabel('');
-            }
-          }}
-        >
-          <DialogContent className="max-w-5xl">
-            <DialogTitle className="text-sm font-medium">{lightboxLabel}</DialogTitle>
-            {lightboxUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={lightboxUrl}
-                alt={lightboxLabel}
-                className="w-full h-auto rounded-md"
-              />
-            )}
-          </DialogContent>
-        </Dialog>
-
         {/* Bottom Actions */}
-        <div className="flex justify-between items-center pt-2 pb-8">
+        <div className="flex flex-wrap justify-between items-center gap-3 pt-2 pb-8">
           <Button variant="outline" onClick={() => router.push(`/recruiter/job/${jobId}`)}>
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Applicants
           </Button>
-          {data.resume_url && (
-            <Button asChild>
-              <a href={data.resume_url} target="_blank" rel="noopener noreferrer">
-                <Download className="w-4 h-4 mr-2" />
-                Download Resume
-              </a>
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {data.resume_url && (
+              <Button asChild variant="outline">
+                <a href={data.resume_url} target="_blank" rel="noopener noreferrer">
+                  <Download className="w-4 h-4 mr-2" />
+                  Download Resume
+                </a>
+              </Button>
+            )}
+            {data.application_status !== 'REJECTED' && (
+              <Button
+                variant="destructive"
+                onClick={handleReject}
+                disabled={rejecting}
+              >
+                <XCircle className="w-4 h-4 mr-2" />
+                {rejecting ? 'Rejecting…' : 'Reject Candidate'}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </RecruiterLayout>

@@ -6,8 +6,9 @@ import { RecruiterLayout } from '@/components/layout/RecruiterLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Loader2, Camera, Download, AlertTriangle } from 'lucide-react';
-import { api } from '@/lib/api';
+import { ArrowLeft, Loader2, Camera, Download, AlertTriangle, XCircle } from 'lucide-react';
+import { api, apiRequest } from '@/lib/api';
+import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 
 interface InterviewDetail {
@@ -37,6 +38,8 @@ interface ReportData {
 
 interface InterviewData {
   interview_id: string;
+  application_id?: string;
+  job_id?: string;
   status: string;
   scheduled_at: string;
   details: InterviewDetail[];
@@ -72,6 +75,38 @@ export default function InterviewDetailsPage() {
   const [snapshotsLoading, setSnapshotsLoading] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [lightboxLabel, setLightboxLabel] = useState<string>('');
+  const [rejecting, setRejecting] = useState(false);
+  const { toast } = useToast();
+
+  const handleReject = async () => {
+    if (!data?.application_id || !data?.job_id) {
+      toast({
+        title: 'Cannot reject',
+        description: 'Missing job/application context.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (!confirm('Reject this candidate? They will be moved to the Rejected lane.')) return;
+    try {
+      setRejecting(true);
+      await apiRequest(
+        `/job/${data.job_id}/applications/${data.application_id}/stage`,
+        { method: 'PATCH', body: JSON.stringify({ rejected: true }) },
+      );
+      toast({ title: 'Candidate rejected' });
+      router.push(`/recruiter/job/${data.job_id}`);
+    } catch (err) {
+      console.error('Reject failed', err);
+      toast({
+        title: 'Error',
+        description: 'Failed to reject candidate.',
+        variant: 'destructive',
+      });
+    } finally {
+      setRejecting(false);
+    }
+  };
 
   useEffect(() => {
     const fetchDetails = async () => {
@@ -153,17 +188,25 @@ export default function InterviewDetailsPage() {
     <RecruiterLayout>
       <div className="space-y-6 max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => router.back()}>
-            <ArrowLeft className="w-5 h-5" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold">Interview Analysis</h1>
-            <p className="text-muted-foreground flex items-center gap-2 mt-1">
-              Status: <Badge variant="outline">{data.status}</Badge> •
-              Scheduled: {new Date(data.scheduled_at).toLocaleString()}
-            </p>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" onClick={() => router.back()}>
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
+            <div>
+              <h1 className="text-2xl font-bold">Interview Analysis</h1>
+              <p className="text-muted-foreground flex items-center gap-2 mt-1">
+                Status: <Badge variant="outline">{data.status}</Badge> •
+                Scheduled: {new Date(data.scheduled_at).toLocaleString()}
+              </p>
+            </div>
           </div>
+          {data.application_id && data.job_id && (
+            <Button variant="destructive" onClick={handleReject} disabled={rejecting}>
+              <XCircle className="w-4 h-4 mr-2" />
+              {rejecting ? 'Rejecting…' : 'Reject Candidate'}
+            </Button>
+          )}
         </div>
 
         {/* AI Report Card */}
