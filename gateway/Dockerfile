@@ -10,4 +10,4 @@ COPY . .
 ENV PORT=8000
 
 # Use package path for uvicorn so it finds the `app` package
-CMD uvicorn app.main:app --host 0.0.0.0 --port $PORT
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips=*"]

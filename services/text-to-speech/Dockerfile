@@ -12,4 +12,4 @@ COPY main.py .
 
 EXPOSE 8011
 
-CMD ["sh", "-c", "gunicorn -k uvicorn.workers.UvicornWorker -w 2 -b 0.0.0.0:${PORT:-8011} main:app"]
+CMD ["sh", "-c", "gunicorn -k uvicorn.workers.UvicornWorker -w 2 --timeout 300 -b 0.0.0.0:${PORT:-8011} main:app"]

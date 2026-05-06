@@ -7,7 +7,7 @@ from typing import Dict, List, Optional, Tuple
 sys.path.insert(0, "/app")
 
 from shared.llm_client import LLMClient
-from pipelines.llm_loader import LLMLoader
+from pipelines.llm_loader import LLMLoader, get_default_chat
 
 _FOLLOWUP_ANGLE_MAP = {
     "deep_dive": "implementation_details",
@@ -24,12 +24,36 @@ _ANGLE_GOAL = {
 }
 
 _FALLBACK_TEMPLATES: Dict[str, List[str]] = {
-    "elaboration":            ["Can you elaborate on that?", "Can you explain that in more detail?", "Could you expand on your answer?"],
-    "clarification":          ["What exactly do you mean by that?", "Can you clarify that point?", "Could you be more specific?"],
-    "examples":               ["Can you give me a concrete example?", "What's a practical use case for this?", "Can you show how that would work in practice?"],
-    "implementation_details": ["How would you actually implement that?", "Walk me through your approach step by step.", "What would the code look like?"],
-    "tradeoffs":              ["What are the trade-offs of that approach?", "How does this compare to alternatives?", "What are the downsides?"],
-    "edge_cases":             ["What could go wrong with that approach?", "How would you handle edge cases?", "What if the input is invalid?"],
+    "elaboration": [
+        "Can you walk me through a specific example from your experience where you applied {topic}?",
+        "What trade-offs did you weigh the last time you used {topic} in a real project?",
+        "What's the most common mistake you've seen others make with {topic}, and how would you avoid it?",
+    ],
+    "clarification": [
+        "Can you walk me through a specific example from your experience where you applied {topic}?",
+        "What trade-offs did you weigh the last time you used {topic} in a real project?",
+        "What's the most common mistake you've seen others make with {topic}, and how would you avoid it?",
+    ],
+    "examples": [
+        "Can you walk me through a specific example from your experience where you applied {topic}?",
+        "What trade-offs did you weigh the last time you used {topic} in a real project?",
+        "What's the most common mistake you've seen others make with {topic}, and how would you avoid it?",
+    ],
+    "implementation_details": [
+        "Can you walk me through a specific example from your experience where you applied {topic}?",
+        "What trade-offs did you weigh the last time you used {topic} in a real project?",
+        "What's the most common mistake you've seen others make with {topic}, and how would you avoid it?",
+    ],
+    "tradeoffs": [
+        "Can you walk me through a specific example from your experience where you applied {topic}?",
+        "What trade-offs did you weigh the last time you used {topic} in a real project?",
+        "What's the most common mistake you've seen others make with {topic}, and how would you avoid it?",
+    ],
+    "edge_cases": [
+        "Can you walk me through a specific example from your experience where you applied {topic}?",
+        "What trade-offs did you weigh the last time you used {topic} in a real project?",
+        "What's the most common mistake you've seen others make with {topic}, and how would you avoid it?",
+    ],
 }
 
 _CONVERSATIONAL_PREFIXES = ["", "I'd like to know: "]
@@ -53,11 +77,16 @@ class QuestionGenerator:
     def __init__(
         self,
         dataset_questions: List[Dict],
-        model_type: str = "openrouter",
+        model_type: str = "gemini",
         difficulty: str = "medium",
     ):
         self.dataset = dataset_questions
-        self.llm = LLMLoader(model_type=model_type).get_llm()
+        # Prefer Gemini via get_default_chat(); fall back to LLMLoader (which
+        # also resolves to OpenRouter only when GEMINI_API_KEY is missing).
+        try:
+            self.llm = get_default_chat().create_chat_completion
+        except Exception:
+            self.llm = LLMLoader(model_type=model_type).get_llm()
         self.difficulty = difficulty
         self.used_question_ids: set = set()
 
@@ -113,23 +142,30 @@ class QuestionGenerator:
         evaluation_result: Optional[Dict] = None,
         resume_json: Optional[Dict] = None,
         difficulty: Optional[str] = None,
+        topic: Optional[str] = None,
     ) -> Tuple[str, Dict]:
         """
         Generate a contextual follow-up question using the LLM, with a
-        template-based fallback.
+        topic-aware template fallback.
         """
         difficulty = (difficulty or self.difficulty).lower()
         decision = (evaluation_result or {}).get("decision", "same_topic").lower()
         angle = _FOLLOWUP_ANGLE_MAP.get(decision, "elaboration")
 
-        system_prompt = self._followup_system_prompt(angle, resume_json, difficulty=difficulty)
-        user_prompt = self._followup_user_prompt(previous_question, previous_answer, evaluation_result, difficulty=difficulty)
+        system_prompt = self._followup_system_prompt(angle, resume_json, difficulty=difficulty, topic=topic)
+        user_prompt = self._followup_user_prompt(
+            previous_question, previous_answer, evaluation_result,
+            difficulty=difficulty, topic=topic, resume_json=resume_json,
+        )
 
         question_text = self._call_llm_for_question(system_prompt, user_prompt)
 
         # Validate; fall back to template if invalid
         if not self._is_valid_followup(question_text, previous_answer):
-            question_text = random.choice(_FALLBACK_TEMPLATES.get(angle, _FALLBACK_TEMPLATES["elaboration"]))
+            template = random.choice(
+                _FALLBACK_TEMPLATES.get(angle, _FALLBACK_TEMPLATES["elaboration"])
+            )
+            question_text = template.format(topic=topic or "this area")
 
         metadata = {
             "source": "llm_generated",
@@ -289,32 +325,30 @@ class QuestionGenerator:
         if not resume_snippet:
             return self._maybe_rephrase(base_question)
 
-        difficulty_guide = _DIFFICULTY_GUIDANCE.get(difficulty, _DIFFICULTY_GUIDANCE["medium"])
         word_limit = _DIFFICULTY_WORD_LIMIT.get(difficulty, 20)
 
         system_prompt = (
-            "You are a senior technical interviewer.\n"
-            f"Difficulty level: {difficulty_guide}\n"
-            "Your job is to ask questions that are SPECIFICALLY tied to the candidate's\n"
-            "own projects, skills, or work experience â€” not generic textbook questions.\n\n"
-            f"Candidate Background:\n{resume_snippet}"
+            "You are a senior technical interviewer at a top company. You ask "
+            "precise, scenario-driven questions that test real understanding, "
+            "not memorization. Output ONE question only — no preamble, no "
+            "numbering, no 'Question:' prefix, no quotation marks, no markdown. "
+            "Keep it under 40 words. Use the candidate's resume to make the "
+            "question concrete (reference their skills/projects when natural). "
+            "Aim for the requested difficulty."
         )
         user_prompt = (
-            f"Base topic / question: {base_question}\n"
-            f"Category: {category}\n"
-            f"Difficulty: {difficulty}\n\n"
-            "Generate ONE interview question that:\n"
-            "- Directly references a specific project, skill, or experience from the candidate's resume\n"
-            "- Asks HOW or WHERE they applied the concept, e.g. 'In your [project], how did you handleâ€¦'\n"
-            f"- Is natural and conversational, strictly under {word_limit} words\n"
-            "- Matches the difficulty level above exactly â€” do NOT make it harder\n"
-            "- No preamble â€” just the question, ending with ?\n\n"
-            "Question:"
+            f"Base topic: {category}\n"
+            f"Seed question (from question bank): {base_question}\n"
+            f"Requested difficulty: {difficulty}\n\n"
+            f"Candidate resume snapshot:\n{resume_snippet}\n\n"
+            "Rewrite the seed question into a more relevant, sharper interview "
+            "question on the same topic, contextualized to this candidate. "
+            "Return ONLY the question text."
         )
 
         question_text = self._call_llm_for_question(system_prompt, user_prompt)
 
-        if not question_text or len(question_text.split()) > word_limit + 5:
+        if not question_text or len(question_text.split()) > word_limit + 25:
             return self._maybe_rephrase(base_question)
 
         return question_text
@@ -358,24 +392,21 @@ class QuestionGenerator:
         return "\n".join(parts)
 
     def _followup_system_prompt(
-        self, angle: str, resume_json: Optional[Dict], difficulty: str = "medium"
+        self,
+        angle: str,
+        resume_json: Optional[Dict],
+        difficulty: str = "medium",
+        topic: Optional[str] = None,
     ) -> str:
-        resume_context = ""
-        if resume_json:
-            snippet = self._build_resume_snippet(resume_json)
-            if snippet:
-                resume_context = f"\nCandidate Background:\n{snippet}\n"
-
-        goal = _ANGLE_GOAL.get(angle, "")
-        difficulty_guide = _DIFFICULTY_GUIDANCE.get(difficulty, _DIFFICULTY_GUIDANCE["medium"])
         return (
-            f"You are a senior technical interviewer.{resume_context}\n"
-            f"Difficulty level for your question: {difficulty_guide}\n"
-            "Your follow-up questions must be:\n"
-            "- Directly relevant to the candidate's previous answer\n"
-            "- Conversational and appropriately scoped to the difficulty level\n"
-            "- Do NOT exceed the word limit implied by the difficulty level\n"
-            f"{f'Goal: {goal}' if goal else ''}"
+            "You are a senior technical interviewer conducting a deep-dive "
+            "follow-up. Based on the candidate's last answer, ask ONE focused "
+            "follow-up that probes a gap, asks for a concrete example, or pushes "
+            "one level deeper into the topic. Do NOT change topic. Do NOT repeat "
+            "what they said. Do NOT ask multiple questions. Output ONE question "
+            "only — no preamble, no numbering, no 'Question:' prefix, no "
+            "quotation marks, under 35 words. Make it specific enough that a "
+            "vague answer is impossible."
         )
 
     def _followup_user_prompt(
@@ -384,28 +415,38 @@ class QuestionGenerator:
         previous_answer: str,
         evaluation_result: Optional[Dict],
         difficulty: str = "medium",
+        topic: Optional[str] = None,
+        resume_json: Optional[Dict] = None,
     ) -> str:
-        word_limit = _DIFFICULTY_WORD_LIMIT.get(difficulty, 20)
-        parts = [
-            f"Previous question: {previous_question}",
-            f"Candidate's answer: {previous_answer}",
-        ]
+        parts = []
+        if topic:
+            parts.append(f"Topic: {topic}")
+        parts.append(f"Original question: {previous_question}")
+        parts.append(f"Candidate's last answer: {previous_answer}")
+
+        if resume_json:
+            snippet = self._build_resume_snippet(resume_json)
+            if snippet:
+                parts.append(f"Candidate resume snapshot:\n{snippet}")
+
         if evaluation_result:
-            parts.append(
-                f"Evaluation:\n"
-                f"- Decision: {evaluation_result.get('decision', 'unknown')}\n"
-                f"- Score: {evaluation_result.get('score_value', 0.5):.2f}\n"
-                f"- Remarks: {evaluation_result.get('remarks', '')}"
+            feedback = evaluation_result.get("feedback") or ""
+            remarks = evaluation_result.get("remarks") or ""
+            extras = []
+            if feedback:
+                extras.append(f"- Evaluator feedback: {feedback}")
+            if remarks:
+                extras.append(f"- Evaluator remarks: {remarks}")
+            extras.append(
+                f"- Decision: {evaluation_result.get('decision', 'unknown')} "
+                f"(score {evaluation_result.get('score_value', 0.5):.2f})"
             )
+            if extras:
+                parts.append("Evaluation:\n" + "\n".join(extras))
+
         parts.append(
-            "Generate ONE natural follow-up question that probes deeper.\n"
-            "Rules:\n"
-            "1. Directly related to the previous answer\n"
-            f"2. Max {word_limit} words â€” strictly enforce this\n"
-            "3. Conversational interview style\n"
-            "4. No preamble â€” just the question\n"
-            "5. End with ?\n\n"
-            "Question:"
+            f"Difficulty: {difficulty}.\n"
+            "Generate the follow-up. Return ONLY the question text."
         )
         return "\n\n".join(parts)
 
@@ -414,10 +455,20 @@ class QuestionGenerator:
     # ------------------------------------------------------------------
 
     def _clean_question(self, text: str) -> str:
-        text = re.sub(r"^(Question:|Follow-up:|Q:)\s*", "", text, flags=re.IGNORECASE).strip()
+        text = text.strip()
+        # Strip common preambles
+        text = re.sub(r"^(Question|Follow-up|Q)\s*[:\-]\s*", "", text, flags=re.IGNORECASE).strip()
+        # Strip surrounding quotes / backticks
+        text = text.strip("`")
+        if (text.startswith('"') and text.endswith('"')) or (text.startswith("'") and text.endswith("'")):
+            text = text[1:-1].strip()
+        # Strip stray leading markdown bullets / numbering
+        text = re.sub(r"^(?:[-*]|\d+[\.)])\s+", "", text).strip()
         # Keep only the first sentence
         first = re.split(r"[.!?]", text)[0].strip()
-        return first + "?" if first and not first.endswith("?") else first
+        # Collapse duplicate trailing punctuation
+        first = first.rstrip("?.! ")
+        return first + "?" if first else first
 
     def _is_valid_followup(self, question: str, previous_answer: str) -> bool:
         if not question or len(question) < 10 or not question.endswith("?"):

@@ -13,10 +13,13 @@ import {
 import { Button } from '@/components/ui/button';
 import {
   autoScheduleApi,
+  emailApi,
   ApiError,
   type JobStage,
   type AutoScheduleResponse,
 } from '@/lib/api';
+import { Switch } from '@/components/ui/switch';
+import { Sparkles, Loader2 } from 'lucide-react';
 
 export interface AutoScheduleDialogProps {
   jobId: string;
@@ -66,6 +69,10 @@ export function AutoScheduleDialog({
   const [previewError, setPreviewError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
+  const [sendEmail, setSendEmail] = React.useState(false);
+  const [emailSubject, setEmailSubject] = React.useState('');
+  const [emailBody, setEmailBody] = React.useState('');
+  const [drafting, setDrafting] = React.useState(false);
 
   React.useEffect(() => {
     if (open) {
@@ -75,8 +82,45 @@ export function AutoScheduleDialog({
       setPreview(null);
       setPreviewError(null);
       setSubmitError(null);
+      setSendEmail(false);
+      setEmailSubject('');
+      setEmailBody('');
     }
   }, [open, stages]);
+
+  const handleGenerate = async () => {
+    setDrafting(true);
+    try {
+      const res = await emailApi.draft({ scenario: 'interview_scheduled' });
+      setEmailSubject(res.subject);
+      setEmailBody(res.body);
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError ? err.message : 'Failed to generate email draft',
+      );
+    } finally {
+      setDrafting(false);
+    }
+  };
+
+  const sendBulkEmails = async (assigned: AutoScheduleResponse['assigned']) => {
+    if (!sendEmail || assigned.length === 0) return;
+    try {
+      // Use bulk-send filtered by stage_id; since auto-schedule moves into the
+      // chosen stage, we can target that stage with INTERVIEW_SCHEDULED status.
+      await emailApi.bulkSend({
+        job_id: jobId,
+        stage_id: stageId,
+        status: 'INTERVIEW_SCHEDULED',
+        subject_template: emailSubject,
+        body_template: emailBody,
+      });
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError ? err.message : 'Failed to send notification emails',
+      );
+    }
+  };
 
   const inputsValid = React.useMemo(() => {
     if (!stageId || !startDate || !endDate) return false;
@@ -139,6 +183,7 @@ export function AutoScheduleDialog({
       toast.success(
         `Scheduled ${res.assigned.length} candidates across ${days} day${days === 1 ? '' : 's'}`,
       );
+      await sendBulkEmails(res.assigned);
       onScheduled();
       onOpenChange(false);
     } catch (err) {
@@ -249,6 +294,70 @@ export function AutoScheduleDialog({
               </div>
             )}
           </div>
+          <div className="flex items-center justify-between rounded-md border p-3">
+            <div className="space-y-0.5">
+              <label className="text-sm font-medium">
+                Send email notification to candidates
+              </label>
+              <p className="text-xs text-muted-foreground">
+                Notify all assigned candidates by email.
+              </p>
+            </div>
+            <Switch checked={sendEmail} onCheckedChange={setSendEmail} disabled={submitting} />
+          </div>
+
+          {sendEmail && (
+            <div className="space-y-3">
+              <div>
+                <label className="text-sm font-medium" htmlFor="auto-email-subject">
+                  Subject
+                </label>
+                <input
+                  id="auto-email-subject"
+                  type="text"
+                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={emailSubject}
+                  onChange={(e) => setEmailSubject(e.target.value)}
+                  placeholder="Interview scheduled for {job_title}"
+                  disabled={submitting}
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium" htmlFor="auto-email-body">
+                    Body
+                  </label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleGenerate}
+                    disabled={drafting || submitting}
+                  >
+                    {drafting ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-4 h-4 mr-2" />
+                    )}
+                    Generate with AI
+                  </Button>
+                </div>
+                <textarea
+                  id="auto-email-body"
+                  className="mt-1 w-full min-h-[140px] rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={emailBody}
+                  onChange={(e) => setEmailBody(e.target.value)}
+                  placeholder="Hi {candidate_name}, your interview for {job_title} is scheduled..."
+                  disabled={submitting}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Template variables: {'{candidate_name}'}, {'{job_title}'},{' '}
+                  {'{company_name}'}, {'{stage_name}'}, {'{scheduled_at}'}
+                </p>
+              </div>
+            </div>
+          )}
+
           {submitError && (
             <p className="text-sm text-destructive">{submitError}</p>
           )}

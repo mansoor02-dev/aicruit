@@ -1,4 +1,4 @@
-# _CLAUDE.md
+﻿# CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -12,7 +12,7 @@ This is a polyrepo-in-monorepo for **AIcruit** (a.k.a. "Harvest AI Hire"), an AI
 
 `services/` — Independent FastAPI microservices, each with its own Dockerfile, requirements.txt, and `.env`
 
-1. `database/` — `schema.sql` + `init_db.py` (one-shot schema bootstrap container)
+`database/` — `schema.sql` + `init_db.py` (one-shot schema bootstrap container)
 
 `infra/docker/docker-compose.yml` — local dev orchestration for everything except the frontend
 
@@ -20,20 +20,20 @@ This is a polyrepo-in-monorepo for **AIcruit** (a.k.a. "Harvest AI Hire"), an AI
 
 ## Service map (ports & responsibilities)
 
-The gateway is the single front door; it fans out to microservices over HTTP via `httpx`. Service URLs are injected as env vars (`*_URL`) so the same code runs against Docker hostnames locally and Railway URLs in prod.
+The gateway is the single front door; it fans out to microservices over HTTP via `httpx`. Service URLs are injected as env vars (`*_URL`) so the same code runs against Docker hostnames locally and Cloud Run URLs in prod.
 
 | Service                 | Port | Role                                                                    |
 | ----------------------- | ---- | ----------------------------------------------------------------------- |
 | `frontend`            | 3000 | Next.js UI (calls gateway only)                                         |
-| `gateway`             | 8000 | API gateway:`/auth/*` (Cognito), `/job/*`, `/interview/*`         |
-| `file-service`        | 8005 | File uploads; serves files at `/static/...` (uploads dir mounted in)  |
+| `gateway`             | 8000 | API gateway: `/auth/*` (Cognito), `/job/*`, `/interview/*`              |
+| `file-service`        | 8005 | File uploads; serves files at `/static/...` (uploads dir mounted in)   |
 | `resume-parser`       | 8006 | PDF/DOCX -> structured JSON via Gemini API                              |
 | `transcribe-audio`    | 8007 | Groq Whisper API: audio -> transcript                                   |
 | `question-generation` | 8010 | LLM (OpenRouter) Q&A; embeddings via Gemini gemini-embedding-001 (768d) |
 | `text-to-speech`      | 8011 | Google Cloud TTS API: synthesizes the question audio                    |
 | `report-generation`   | 8012 | LLM-powered final interview reports (recruiter + candidate views)       |
-| `postgres`            | 5432 | Primary datastore                                                       |
-| `pgadmin`             | 5050 | Admin UI (`admin@aicruit.com` / `admin123` in compose)              |
+| `postgres`            | 5432 | Primary datastore (pgvector extension enabled)                          |
+| `pgadmin`             | 5050 | Admin UI (`admin@aicruit.com` / `admin123` in compose)                  |
 
 ## Architecture: data & control flow
 
@@ -130,15 +130,26 @@ Each has a `.env` (not committed for some) with provider keys: `GEMINI_API_KEY`,
 
 ## Deployment
 
-GCP Cloud Run for backend services, Cloud SQL for Postgres, GCS for uploads, Secret Manager for keys; Vercel for frontend. Per-service deploy: `bash scripts/gcp/deploy.sh <name>`. See [DEPLOY.md](./DEPLOY.md) for the full guide.
+GCP Cloud Run for backend services, Cloud SQL for Postgres, GCS for uploads, Secret Manager for keys; Vercel for frontend. See [DEPLOY.md](./DEPLOY.md) for the full guide.
+
+### GCP scripts (`scripts/gcp/`)
+
+| Script            | Purpose                                                                          |
+| ----------------- | -------------------------------------------------------------------------------- |
+| `setup.sh`        | One-time GCP bootstrap: enables APIs, creates Artifact Registry, GCS bucket, Cloud SQL instance |
+| `seed-secrets.sh` | Pushes values from `.gcp-secrets.env` into Google Secret Manager                |
+| `deploy.sh <svc>` | Builds and deploys a single service to Cloud Run                                 |
+| `deploy-all.sh`   | Runs `deploy.sh` for all 7 backend services in sequence                          |
+
+Copy `.gcp-secrets.env.example` → `.gcp-secrets.env` and fill in values before running `seed-secrets.sh`.
 
 - Service-to-service URLs are injected per service as env vars (e.g. `QUESTION_GEN_URL`, `TTS_URL`, `TRANSCRIBE_URL`, `REPORT_GEN_URL`, `FILE_SERVICE_URL`, `RESUME_PARSER_URL`). Defaults in the code point at `localhost` and will not work in prod.
-- `FRONTEND_ORIGINS` (comma-separated) controls CORS on every Python service - set this on every deployed service, not just the gateway.
+- `FRONTEND_ORIGINS` (comma-separated) controls CORS on every Python service — set this on every deployed service, not just the gateway.
 
 ## Conventions worth knowing
 
-- **All services are API-only**; no local model files, no GPU dependencies. Dockerfiles are slim single-stage python:3.11-slim images. file-service has a STORAGE_BACKEND env (local/gcs) - local for dev, gcs on Cloud Run.
+- **All services are API-only**; no local model files, no GPU dependencies. Dockerfiles are slim single-stage `python:3.11-slim` images. `file-service` has a `STORAGE_BACKEND` env (`local`/`gcs`) — local for dev, gcs on Cloud Run.
 - **All Python services are FastAPI + SQLAlchemy** with the same shape: `app/main.py` (or `app/api.py` for resume-parser) wiring CORS + routers; routers/handlers in submodules. Stick to this pattern.
-- **`/health` endpoint** exists on every service and is wired into compose healthchecks for the LLM services.
+- **`/health` endpoint** exists on every service and is wired into compose healthchecks. Healthchecks use Python's `urllib` (not `curl`) because the images are slim and have no curl binary.
 - **No tests** are checked in. There is no test runner configured in any service or in the frontend. If adding tests, you are establishing the convention.
 - **Secrets in repo**: `gateway/.env` and several service `.env` files are committed and contain real-looking credentials (Cognito client secret, GROQ key in compose, DB password). Treat any value you find here as already leaked; rotate before shipping anything externally, and do not add new secrets to committed `.env` files.

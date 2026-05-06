@@ -49,6 +49,8 @@ SECRETS=""         # comma-separated KEY=SECRET_NAME:latest
 NEEDS_SQL="false"
 PUBLIC="false"
 
+_resolve() { gcloud run services describe "$1" --region="$GCP_REGION" --format='value(status.url)' 2>/dev/null || true; }
+
 case "$SERVICE" in
   gateway)
     SRC_DIR="gateway"
@@ -56,7 +58,21 @@ case "$SERVICE" in
     PORT="8000"
     PUBLIC="true"
     NEEDS_SQL="true"
-    ENV_VARS="FRONTEND_ORIGINS=${FRONTEND_ORIGINS},FILE_SERVICE_URL=${FILE_SERVICE_URL:-},RESUME_PARSER_URL=${RESUME_PARSER_URL:-},QUESTION_GEN_URL=${QUESTION_GEN_URL:-},TRANSCRIBE_URL=${TRANSCRIBE_URL:-},TTS_URL=${TTS_URL:-},REPORT_GEN_URL=${REPORT_GEN_URL:-}"
+    # Auto-resolve sibling service URLs from Cloud Run if not pre-exported.
+    # Lets `bash deploy.sh gateway` work standalone (not just via deploy-all.sh).
+    : "${FILE_SERVICE_URL:=$(_resolve file-service)}"
+    : "${RESUME_PARSER_URL:=$(_resolve resume-parser)}"
+    : "${QUESTION_GEN_URL:=$(_resolve question-generation)}"
+    : "${TRANSCRIBE_URL:=$(_resolve transcribe-audio)}"
+    : "${TTS_URL:=$(_resolve text-to-speech)}"
+    : "${REPORT_GEN_URL:=$(_resolve report-generation)}"
+    for v in FILE_SERVICE_URL RESUME_PARSER_URL QUESTION_GEN_URL TRANSCRIBE_URL TTS_URL REPORT_GEN_URL; do
+      if [ -z "${!v}" ]; then
+        echo "ERROR: $v is empty. Deploy that upstream service first, or export $v before running this." >&2
+        exit 1
+      fi
+    done
+    ENV_VARS="FRONTEND_ORIGINS=${FRONTEND_ORIGINS},FILE_SERVICE_URL=${FILE_SERVICE_URL},RESUME_PARSER_URL=${RESUME_PARSER_URL},QUESTION_GEN_URL=${QUESTION_GEN_URL},TRANSCRIBE_URL=${TRANSCRIBE_URL},TTS_URL=${TTS_URL},REPORT_GEN_URL=${REPORT_GEN_URL}"
     SECRETS="DATABASE_URL=DATABASE_URL:latest,COGNITO_CLIENT_ID=COGNITO_CLIENT_ID:latest,COGNITO_CLIENT_SECRET=COGNITO_CLIENT_SECRET:latest,COGNITO_USER_POOL_ID=COGNITO_USER_POOL_ID:latest,COGNITO_REGION=COGNITO_REGION:latest"
     ;;
   file-service)
@@ -65,15 +81,18 @@ case "$SERVICE" in
     PORT="8005"
     PUBLIC="true"
     NEEDS_SQL="true"
-    ENV_VARS="FRONTEND_ORIGINS=${FRONTEND_ORIGINS},GCS_BUCKET=${GCS_BUCKET}"
+    ENV_VARS="FRONTEND_ORIGINS=${FRONTEND_ORIGINS},GCS_BUCKET=${GCS_BUCKET},STORAGE_BACKEND=gcs"
     SECRETS="DATABASE_URL=DATABASE_URL:latest"
     ;;
   resume-parser)
     SRC_DIR="services/resume-parser"
     RUN_NAME="resume-parser"
     PORT="8006"
-    ENV_VARS="FRONTEND_ORIGINS=${FRONTEND_ORIGINS}"
-    SECRETS="GEMINI_API_KEY=GEMINI_API_KEY:latest"
+    NEEDS_SQL="true"
+    : "${FILE_SERVICE_URL:=$(_resolve file-service)}"
+    [ -z "$FILE_SERVICE_URL" ] && { echo "ERROR: FILE_SERVICE_URL empty (deploy file-service first)" >&2; exit 1; }
+    ENV_VARS="FRONTEND_ORIGINS=${FRONTEND_ORIGINS},FILE_SERVICE_URL=${FILE_SERVICE_URL}"
+    SECRETS="GEMINI_API_KEY=GEMINI_API_KEY:latest,DATABASE_URL=DATABASE_URL:latest"
     ;;
   transcribe-audio)
     SRC_DIR="services/transcribe-audio"
@@ -86,8 +105,11 @@ case "$SERVICE" in
     SRC_DIR="services/question-generation"
     RUN_NAME="question-generation"
     PORT="8010"
-    ENV_VARS="FRONTEND_ORIGINS=${FRONTEND_ORIGINS}"
-    SECRETS="OPENROUTER_API_KEY=OPENROUTER_API_KEY:latest"
+    NEEDS_SQL="true"
+    : "${FILE_SERVICE_URL:=$(_resolve file-service)}"
+    [ -z "$FILE_SERVICE_URL" ] && { echo "ERROR: FILE_SERVICE_URL empty (deploy file-service first)" >&2; exit 1; }
+    ENV_VARS="FRONTEND_ORIGINS=${FRONTEND_ORIGINS},EMBEDDING_MODEL=gemini-embedding-001,EMBEDDING_DIMS=768,FILE_SERVICE_URL=${FILE_SERVICE_URL}"
+    SECRETS="GEMINI_API_KEY=GEMINI_API_KEY:latest,OPENROUTER_API_KEY=OPENROUTER_API_KEY:latest,DATABASE_URL=DATABASE_URL:latest"
     ;;
   text-to-speech)
     SRC_DIR="services/text-to-speech"
@@ -101,7 +123,9 @@ case "$SERVICE" in
     RUN_NAME="report-generation"
     PORT="8012"
     NEEDS_SQL="true"
-    ENV_VARS="FRONTEND_ORIGINS=${FRONTEND_ORIGINS}"
+    : "${FILE_SERVICE_URL:=$(_resolve file-service)}"
+    [ -z "$FILE_SERVICE_URL" ] && { echo "ERROR: FILE_SERVICE_URL empty (deploy file-service first)" >&2; exit 1; }
+    ENV_VARS="FRONTEND_ORIGINS=${FRONTEND_ORIGINS},FILE_SERVICE_URL=${FILE_SERVICE_URL}"
     SECRETS="OPENROUTER_API_KEY=OPENROUTER_API_KEY:latest,DATABASE_URL=DATABASE_URL:latest"
     ;;
   *)
@@ -127,6 +151,26 @@ echo "  Cloud SQL:        $([[ $NEEDS_SQL == true ]] && echo $CONNECTION_NAME ||
 echo "  Env vars:         $ENV_VARS"
 echo "  Secrets:          ${SECRETS:-(none)}"
 echo "==========================="
+
+# Services that import from the repo-root shared/ package need it copied
+# into their build context, since `gcloud builds submit` only uploads SRC_DIR.
+NEEDS_SHARED="false"
+case "$SERVICE" in
+  resume-parser|question-generation|report-generation)
+    NEEDS_SHARED="true"
+    ;;
+esac
+
+if [ "$NEEDS_SHARED" = "true" ]; then
+  if [ ! -d "shared" ]; then
+    echo "ERROR: shared/ directory not found at repo root. Run deploy.sh from repo root." >&2
+    exit 1
+  fi
+  echo ">> Vendoring shared/ into $SRC_DIR/shared (pre-build)"
+  rm -rf "$SRC_DIR/shared"
+  cp -r shared "$SRC_DIR/shared"
+  trap 'rm -rf "$SRC_DIR/shared"' EXIT
+fi
 
 echo ">> Building image with Cloud Build..."
 gcloud builds submit --tag "$IMAGE" "$SRC_DIR"

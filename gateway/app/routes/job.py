@@ -612,11 +612,16 @@ def get_my_applications(
         
         # Check for scheduled interview
         scheduled_at = None
+        interview_id = None
+        interview_status = None
         if hasattr(app, 'interviews') and app.interviews:
             # Sort by created_at desc to get latest
             sorted_interviews = sorted(app.interviews, key=lambda x: x.created_at, reverse=True)
             if sorted_interviews:
-                 scheduled_at = sorted_interviews[0].scheduled_at
+                latest = sorted_interviews[0]
+                scheduled_at = latest.scheduled_at
+                interview_id = latest.id
+                interview_status = latest.status
 
         result.append(
             MyApplicationResponse(
@@ -635,10 +640,63 @@ def get_my_applications(
                 last_date_to_apply=job.last_date_to_apply,
                 job_status=job.status,
                 job_created_at=job.created_at,
-                scheduled_at=scheduled_at
+                scheduled_at=scheduled_at,
+                interview_id=interview_id,
+                interview_status=interview_status,
             )
         )
     
+    return result
+
+
+# =========================================================
+# 6b. GET ALL CANDIDATES (Recruiters Only) — across all jobs in their company
+# =========================================================
+@router.get("/candidates/all")
+def get_all_company_candidates(
+    db: Session = Depends(get_db_session),
+    current_user: UserModel = Depends(allow_recruiters),
+):
+    """Return every applicant against every job owned by the current recruiter's company."""
+    if not current_user.recruiter:
+        raise HTTPException(status_code=400, detail="Recruiter profile incomplete")
+
+    company_id = current_user.recruiter.company_id
+
+    apps = (
+        db.query(ApplicationModel)
+        .options(joinedload(ApplicationModel.interviews))
+        .join(JobModel, JobModel.id == ApplicationModel.job_id)
+        .filter(JobModel.company_id == company_id)
+        .all()
+    )
+
+    result = []
+    for app in apps:
+        job = app.job
+        candidate = app.candidate
+        user = candidate.user if candidate else None
+
+        latest_interview = None
+        if hasattr(app, "interviews") and app.interviews:
+            latest_interview = max(app.interviews, key=lambda x: x.created_at)
+
+        result.append({
+            "application_id": str(app.id),
+            "candidate_id": str(candidate.id) if candidate else None,
+            "name": app.applicant_name or (user.full_name if user else ""),
+            "email": app.applicant_email or (user.email if user else ""),
+            "phone": app.applicant_phone or (candidate.phone if candidate else "") or "",
+            "location": app.applicant_location or "",
+            "job_id": str(job.id),
+            "job_title": job.title,
+            "status": app.status,
+            "ai_match_score": app.ai_match_score,
+            "interview_id": str(latest_interview.id) if latest_interview else None,
+            "interview_status": latest_interview.status if latest_interview else None,
+            "applied_at": app.created_at.isoformat() if app.created_at else None,
+        })
+
     return result
 
 

@@ -52,7 +52,8 @@ class OpenRouterChat:
 class GeminiChat:
     """Wrapper for Google Gemini API."""
 
-    def __init__(self, model_name: str = "gemini-2.5-flash"):
+    def __init__(self, model_name: Optional[str] = None):
+        model_name = model_name or os.getenv("GEMINI_CHAT_MODEL", "gemini-2.5-flash")
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             raise ValueError("GEMINI_API_KEY environment variable not set")
@@ -86,10 +87,20 @@ class GeminiChat:
         return {"choices": [{"message": {"role": "assistant", "content": text.strip()}}]}
 
 
-class LLMLoader:
-    """Loads and caches an LLM callable (OpenRouter or Gemini)."""
+def get_default_chat() -> Any:
+    """
+    Return a default chat client. Prefers Gemini when GEMINI_API_KEY is set,
+    otherwise falls back to OpenRouter.
+    """
+    if os.getenv("GEMINI_API_KEY"):
+        return GeminiChat()
+    return OpenRouterChat()
 
-    def __init__(self, model_type: str = "openrouter"):
+
+class LLMLoader:
+    """Loads and caches an LLM callable (Gemini by default, OpenRouter fallback)."""
+
+    def __init__(self, model_type: str = "gemini"):
         self.model_type = model_type
         self._llm: Optional[Any] = None
 
@@ -97,10 +108,12 @@ class LLMLoader:
         if self._llm is not None:
             return self._llm
 
-        if self.model_type == "openrouter":
-            self._llm = OpenRouterChat().create_chat_completion
-        else:
+        # Prefer Gemini when key is available, regardless of requested type,
+        # falling back to OpenRouter only when Gemini is unconfigured.
+        if os.getenv("GEMINI_API_KEY"):
             self._llm = GeminiChat().create_chat_completion
+        else:
+            self._llm = OpenRouterChat().create_chat_completion
 
         return self._llm
 

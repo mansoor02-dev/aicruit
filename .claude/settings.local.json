@@ -6,7 +6,12 @@
       "Bash(xargs wc *)",
       "Bash(python -c \"import ast; ast.parse\\(open\\(r'f:\\\\Projects\\\\AIcruit\\\\gateway\\\\app\\\\routes\\\\interview.py', encoding='utf-8'\\).read\\(\\)\\)\")",
       "Bash(rm -rf '/f/Projects/AIcruit/services/question-generation/cache/*' '/f/Projects/AIcruit/services/question-generation/cache/.[!.]*')",
-      "Bash(touch /f/Projects/AIcruit/services/question-generation/cache/.gitkeep)"
+      "Bash(touch /f/Projects/AIcruit/services/question-generation/cache/.gitkeep)",
+      "Bash(Get-ChildItem -Path \"f:\\\\Projects\\\\AIcruit\" -Filter \".cursorrules\" -Recurse -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Get-ChildItem -Path \"f:\\\\Projects\\\\AIcruit\" -Directory)",
+      "Bash(Select-Object Name)",
+      "Bash(Get-ChildItem -Path \"f:\\\\Projects\\\\AIcruit\\\\frontend\\\\src\\\\app\\\\candidate\" -Recurse -Filter \"*.tsx\" -o Name)"
     ]
   }
 }

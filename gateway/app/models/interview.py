@@ -7,6 +7,9 @@ from typing import Optional
 class InterviewScheduleRequest(BaseModel):
     application_id: UUID
     scheduled_at: datetime
+    send_email: bool = False
+    email_subject: Optional[str] = None
+    email_body: Optional[str] = None
 
 
 class InterviewScheduleResponse(BaseModel):

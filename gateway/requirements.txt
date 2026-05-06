@@ -1,8 +1,10 @@
-boto3
+﻿boto3
 fastapi
 uvicorn
 gunicorn
 pydantic-settings
+pydantic[email]
+email-validator
 SQLAlchemy
 python-dotenv
 passlib[bcrypt]

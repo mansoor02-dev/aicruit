@@ -93,6 +93,8 @@ class MyApplicationResponse(BaseModel):
     job_status: str
     job_created_at: datetime
     scheduled_at: Optional[datetime] = None
+    interview_id: Optional[UUID] = None
+    interview_status: Optional[str] = None
 
 
 # Schema for Applicant info (Recruiter view)

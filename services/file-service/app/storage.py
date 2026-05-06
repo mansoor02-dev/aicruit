@@ -9,6 +9,9 @@ from abc import ABC, abstractmethod
 from datetime import timedelta
 from typing import Optional
 
+import google.auth
+from google.auth.transport.requests import Request as AuthRequest
+
 
 class StorageBackend(ABC):
     @abstractmethod
@@ -78,6 +81,24 @@ class GCSStorage(StorageBackend):
     def _blob(self, key: str):
         return self._bucket.blob(key)
 
+    def _signing_kwargs(self) -> dict:
+        """Return kwargs for generate_signed_url that work on Cloud Run.
+
+        On Cloud Run the runtime credentials don't include a private key,
+        so v4 signing can't be done locally. Passing service_account_email
+        + access_token routes signing through the IAM signBlob API.
+        """
+        creds, _ = google.auth.default()
+        creds.refresh(AuthRequest())
+        sa_email = getattr(creds, "service_account_email", None)
+        if not sa_email:
+            # Not on Cloud Run / GCE — local path, signing works directly
+            return {}
+        return {
+            "service_account_email": sa_email,
+            "access_token": creds.token,
+        }
+
     def save(self, file_bytes: bytes, key: str, content_type: Optional[str] = None) -> str:
         blob = self._blob(key)
         blob.upload_from_string(file_bytes, content_type=content_type or "application/octet-stream")
@@ -90,6 +111,7 @@ class GCSStorage(StorageBackend):
             version="v4",
             expiration=timedelta(hours=1),
             method="GET",
+            **self._signing_kwargs(),
         )
 
     def delete(self, key: str) -> None:

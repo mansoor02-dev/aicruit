@@ -327,19 +327,33 @@ def _build_audio_response(
     question_text: str,
     question_sequence: int,
     is_interview_ended: bool = False,
+    question_category: Optional[str] = None,
+    total_questions: Optional[int] = None,
+    fixed_question_count: Optional[bool] = None,
 ) -> StreamingResponse:
     """
     Build a StreamingResponse that sends the audio file as binary,
     with interview metadata in custom headers.
     """
+    # Sanitize header values — HTTP headers must be ISO-8859-1 / latin-1 safe.
+    safe_question_text = (question_text or "").replace("\n", " ").replace("\r", " ")
     headers = {
         "X-Interview-Id": str(interview_id),
-        "X-Question-Text": question_text.replace("\n", " "),
+        "X-Question-Text": safe_question_text,
         "X-Question-Sequence": str(question_sequence),
         "X-Interview-Ended": "true" if is_interview_ended else "false",
+        "X-Question-Category": (question_category or ""),
         "Content-Disposition": f'attachment; filename="question_{question_sequence}.wav"',
-        "Access-Control-Expose-Headers": "X-Interview-Id, X-Question-Text, X-Question-Sequence, X-Interview-Ended",
+        "Access-Control-Expose-Headers": (
+            "X-Interview-Id, X-Question-Text, X-Question-Sequence, "
+            "X-Interview-Ended, X-Question-Category, "
+            "X-Total-Questions, X-Fixed-Question-Count"
+        ),
     }
+    if total_questions is not None:
+        headers["X-Total-Questions"] = str(total_questions)
+    if fixed_question_count is not None:
+        headers["X-Fixed-Question-Count"] = "true" if fixed_question_count else "false"
     return StreamingResponse(
         io.BytesIO(audio_bytes),
         media_type=content_type,
@@ -490,6 +504,24 @@ def schedule_interview(
     db.commit()
     db.refresh(new_interview)
 
+    # 4. Optionally send a notification email to the candidate
+    if payload.send_email:
+        candidate_email = (application.applicant_email or "").strip()
+        if candidate_email and (payload.email_subject or payload.email_body):
+            try:
+                from ..services.email import send_email as _send_email
+                _send_email(
+                    to=candidate_email,
+                    subject=payload.email_subject or "Interview scheduled",
+                    body=payload.email_body or "",
+                )
+            except Exception as e:
+                # Don't fail the schedule if email errors
+                import logging
+                logging.getLogger(__name__).error(
+                    f"Failed to send schedule notification email: {e}"
+                )
+
     return new_interview
 
 
@@ -590,12 +622,17 @@ def start_interview(
     audio_bytes, content_type = _synthesize_audio(question_text)
 
     # ── 7. Return binary audio with metadata in headers ──────────────────
+    total_questions_cap = _resolve_max_questions(settings)
+    is_fixed_count = bool(settings.fixed_question_count) if settings is not None else False
     return _build_audio_response(
         audio_bytes=audio_bytes,
         content_type=content_type,
         interview_id=interview.id,
         question_text=question_text,
         question_sequence=sequence_number,
+        question_category=None,
+        total_questions=total_questions_cap,
+        fixed_question_count=is_fixed_count,
     )
 
 
@@ -784,10 +821,8 @@ def evaluate_and_generate(
     # Question 1 = intro (already saved). So if total_questions == 1,
     # the next question being generated is Q2 → prepend thank-you.
     if total_questions == 1:
-        next_question_text = (
-            "Thank you for your introduction, now please tell me "
-            + next_question_text
-        )
+        # First real question after the introduction — add a clean conversational bridge
+        next_question_text = f"Thanks for the introduction. {next_question_text}"
 
     # ── 10. Extract evaluation scores and update the response record ─────
     evaluation = metadata.get("evaluation", {})
@@ -831,6 +866,7 @@ def evaluate_and_generate(
     audio_bytes, content_type = _synthesize_audio(next_question_text)
 
     # ── 13. Return binary audio with metadata in headers ─────────────────
+    is_fixed_count = bool(settings.fixed_question_count) if settings is not None else False
     return _build_audio_response(
         audio_bytes=audio_bytes,
         content_type=content_type,
@@ -838,6 +874,9 @@ def evaluate_and_generate(
         question_text=next_question_text,
         question_sequence=sequence_number,
         is_interview_ended=False,
+        question_category=next_category,
+        total_questions=max_questions,
+        fixed_question_count=is_fixed_count,
     )
 
 
@@ -1020,6 +1059,8 @@ def get_interview_details(
         
     return {
         "interview_id": str(interview.id),
+        "application_id": str(interview.application_id),
+        "job_id": str(interview.application.job_id) if interview.application else None,
         "status": interview.status,
         "scheduled_at": interview.scheduled_at,
         "details": details,

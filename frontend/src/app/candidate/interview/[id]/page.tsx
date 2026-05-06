@@ -48,7 +48,6 @@ import { useToast } from '@/hooks/use-toast';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const QUESTION_TIMER_SECONDS = 180; // 3 minutes per question
-const MAX_QUESTIONS = 10;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -101,6 +100,8 @@ export default function InterviewPage() {
 
   // Interview state
   const [currentQuestion, setCurrentQuestion] = useState<QuestionData | null>(null);
+  const [totalQuestions, setTotalQuestions] = useState<number | null>(null);
+  const [isFixedCount, setIsFixedCount] = useState<boolean | null>(null);
   const [isLoadingQuestion, setIsLoadingQuestion] = useState(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -585,6 +586,15 @@ export default function InterviewPage() {
       const questionText = response.headers.get('X-Question-Text') || '';
       const questionSequence = parseInt(response.headers.get('X-Question-Sequence') || '1', 10);
       const category = response.headers.get('X-Question-Category') || undefined;
+      const totalHeader: string | null = response.headers.get('X-Total-Questions');
+      const fixedHeader: string | null = response.headers.get('X-Fixed-Question-Count');
+      if (totalHeader) {
+        const n = parseInt(totalHeader, 10);
+        if (Number.isFinite(n)) setTotalQuestions(n);
+      }
+      if (fixedHeader !== null) {
+        setIsFixedCount(fixedHeader === 'true');
+      }
       const audioBlob = await response.blob();
 
       const qData: QuestionData = {
@@ -704,6 +714,15 @@ export default function InterviewPage() {
       const questionText = response.headers.get('X-Question-Text') || '';
       const questionSequence = parseInt(response.headers.get('X-Question-Sequence') || '1', 10);
       const category = response.headers.get('X-Question-Category') || undefined;
+      const totalHeader: string | null = response.headers.get('X-Total-Questions');
+      const fixedHeader: string | null = response.headers.get('X-Fixed-Question-Count');
+      if (totalHeader) {
+        const n = parseInt(totalHeader, 10);
+        if (Number.isFinite(n)) setTotalQuestions(n);
+      }
+      if (fixedHeader !== null) {
+        setIsFixedCount(fixedHeader === 'true');
+      }
       const audioBlob = await response.blob();
 
       if (interviewEnded) {
@@ -819,7 +838,7 @@ export default function InterviewPage() {
                       <p className="font-medium text-foreground">3 Minutes Per Question</p>
                       <p className="text-sm text-muted-foreground">
                         You have 3 minutes to answer each question. The interview ends automatically
-                        if time runs out. There are up to {MAX_QUESTIONS} questions.
+                        if time runs out.{totalQuestions ? ` There are up to ${totalQuestions} questions.` : ''}
                       </p>
                     </div>
                   </div>
@@ -1177,7 +1196,9 @@ export default function InterviewPage() {
               variant="outline"
               className="text-xs sm:text-sm px-3 py-1 border-white/15 bg-white/5 text-slate-200"
             >
-              Question {questionCount} of {MAX_QUESTIONS}
+              {isFixedCount === false
+                ? `Question ${questionCount}`
+                : `Question ${questionCount}${totalQuestions ? ` of ${totalQuestions}` : ''}`}
             </Badge>
             <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full border border-white/10 bg-white/5">
               <Clock
@@ -1294,7 +1315,9 @@ export default function InterviewPage() {
             <CardContent className="p-5 sm:p-6 space-y-3">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge className="bg-primary/15 text-primary border border-primary/30 hover:bg-primary/15">
-                  Q {currentQuestion.questionSequence}/{MAX_QUESTIONS}
+                  {isFixedCount === false
+                    ? `Q ${currentQuestion.questionSequence}`
+                    : `Q ${currentQuestion.questionSequence}${totalQuestions ? `/${totalQuestions}` : ''}`}
                 </Badge>
                 {currentQuestion.category && (
                   <Badge

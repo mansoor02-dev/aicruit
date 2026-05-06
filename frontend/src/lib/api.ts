@@ -159,6 +159,53 @@ export const boardApi = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Email helpers
+// ---------------------------------------------------------------------------
+
+export interface EmailDraftRequest {
+  scenario: string;
+  application_id?: string;
+  custom_instructions?: string;
+  include_interview_score?: boolean;
+}
+
+export interface EmailDraftResponse {
+  subject: string;
+  body: string;
+}
+
+export interface EmailSendRequest {
+  to: string[];
+  subject: string;
+  body: string;
+  application_id?: string;
+}
+
+export interface EmailBulkSendRequest {
+  job_id: string;
+  status?: string;
+  stage_id?: string;
+  subject_template: string;
+  body_template: string;
+  include_interview_score?: boolean;
+}
+
+export interface EmailBulkSendResponse {
+  sent: number;
+  failed: number;
+  errors: Array<{ application_id?: string; to?: string; error: string }>;
+}
+
+export const emailApi = {
+  draft: (body: EmailDraftRequest) =>
+    api.post<EmailDraftResponse>('/email/draft', body),
+  send: (body: EmailSendRequest) =>
+    api.post<{ sent: boolean; to: string[] }>('/email/send', body),
+  bulkSend: (body: EmailBulkSendRequest) =>
+    api.post<EmailBulkSendResponse>('/email/bulk-send', body),
+};
+
 export const autoScheduleApi = {
   run: (jobId: string, body: { stage_id: string; start_date: string; end_date: string }) =>
     api.post<AutoScheduleResponse>(`/job/${jobId}/auto-schedule`, body),

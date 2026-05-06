@@ -9,7 +9,7 @@ import numpy as np
 from pipelines.llm_loader import GeminiEmbedder
 
 from shared.llm_client import LLMClient
-from pipelines.llm_loader import LLMLoader
+from pipelines.llm_loader import LLMLoader, get_default_chat
 
 
 # ---------------------------------------------------------------------------
@@ -76,11 +76,14 @@ class AnswerEvaluator:
     def __init__(
         self,
         embedder: GeminiEmbedder,
-        model_type: str = "openrouter",
+        model_type: str = "gemini",
         pass_threshold: float = PASS_THRESHOLD,
     ):
         self.embedder = embedder
-        self.llm = LLMLoader(model_type=model_type).get_llm()
+        try:
+            self.llm = get_default_chat().create_chat_completion
+        except Exception:
+            self.llm = LLMLoader(model_type=model_type).get_llm()
         self.pass_threshold = pass_threshold
 
     # ------------------------------------------------------------------

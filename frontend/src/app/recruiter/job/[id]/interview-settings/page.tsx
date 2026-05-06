@@ -159,6 +159,21 @@ export default function InterviewSettingsPage() {
       const rows = parseCsv(text);
       setUploadedQuestions(rows);
       toast({ title: 'Parsed', description: `${rows.length} questions loaded.` });
+
+      // Auto-fill topics from the CSV's topic column.
+      const uniqueTopics = Array.from(
+        new Set(rows.map((q) => (q.topic || '').trim()).filter(Boolean))
+      );
+      if (uniqueTopics.length > 0) {
+        setTopics((prev) => {
+          const merged = new Set([...prev, ...uniqueTopics]);
+          return Array.from(merged);
+        });
+        toast({
+          title: 'Topics auto-filled from CSV',
+          description: `${uniqueTopics.length} unique topics detected. You can edit them below.`,
+        });
+      }
     } else if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) {
       toast({
         title: 'Excel not parsed client-side',

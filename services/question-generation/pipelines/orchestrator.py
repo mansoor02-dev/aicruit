@@ -87,6 +87,7 @@ class InterviewOrchestrator:
                 evaluation_result=flow,
                 resume_json=resume_json,
                 difficulty=difficulty,
+                topic=category,
             )
         else:
             topics_covered = self._extract_topics(previous_qa_list)

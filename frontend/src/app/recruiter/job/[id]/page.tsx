@@ -32,8 +32,10 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { api } from '@/lib/api';
+import { api, emailApi } from '@/lib/api';
 import { KanbanBoard } from '@/components/kanban/KanbanBoard';
+import { Switch } from '@/components/ui/switch';
+import { Sparkles, Mail } from 'lucide-react';
 
 interface ApplicantInfo {
   application_id: string;
@@ -83,6 +85,10 @@ export default function JobDetails() {
   const [selectedApplicant, setSelectedApplicant] = useState<ApplicantInfo | null>(null);
   const [interviewDate, setInterviewDate] = useState<Date>();
   const [interviewTime, setInterviewTime] = useState('');
+  const [scheduleSendEmail, setScheduleSendEmail] = useState(false);
+  const [scheduleEmailSubject, setScheduleEmailSubject] = useState('');
+  const [scheduleEmailBody, setScheduleEmailBody] = useState('');
+  const [scheduleEmailDrafting, setScheduleEmailDrafting] = useState(false);
   
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<JobUpdateData>({
@@ -181,6 +187,9 @@ export default function JobDetails() {
       await api.post('/interview/schedule', {
         application_id: selectedApplicant.application_id,
         scheduled_at: isoString,
+        send_email: scheduleSendEmail,
+        email_subject: scheduleSendEmail ? scheduleEmailSubject : null,
+        email_body: scheduleSendEmail ? scheduleEmailBody : null,
       });
 
       toast({
@@ -211,6 +220,30 @@ export default function JobDetails() {
       setSelectedApplicant(null);
       setInterviewDate(undefined);
       setInterviewTime('');
+      setScheduleSendEmail(false);
+      setScheduleEmailSubject('');
+      setScheduleEmailBody('');
+    }
+  };
+
+  const handleGenerateScheduleEmail = async () => {
+    if (!selectedApplicant) return;
+    setScheduleEmailDrafting(true);
+    try {
+      const res = await emailApi.draft({
+        scenario: 'interview_scheduled',
+        application_id: selectedApplicant.application_id,
+      });
+      setScheduleEmailSubject(res.subject);
+      setScheduleEmailBody(res.body);
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: 'Failed to generate email draft.',
+        variant: 'destructive',
+      });
+    } finally {
+      setScheduleEmailDrafting(false);
     }
   };
 
@@ -323,13 +356,22 @@ export default function JobDetails() {
 
         {/* Applicants Kanban Board */}
         <div>
-          <h2 className="text-xl font-semibold mb-4">Applicants</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold">Applicants</h2>
+            <Button
+              variant="outline"
+              onClick={() => router.push(`/recruiter/job/${id}/email`)}
+            >
+              <Mail className="w-4 h-4 mr-2" />
+              Send Email to Candidates
+            </Button>
+          </div>
           <KanbanBoard jobId={String(id)} aiInterviewEnabled={aiInterviewEnabled} />
         </div>
 
         {/* Schedule Interview Dialog */}
         <Dialog open={!!selectedApplicant} onOpenChange={(open) => !open && setSelectedApplicant(null)}>
-          <DialogContent className="bg-card sm:max-w-[425px]">
+          <DialogContent className="bg-card sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Schedule Interview</DialogTitle>
             </DialogHeader>
@@ -381,11 +423,71 @@ export default function JobDetails() {
                 </div>
               </div>
 
+              <div className="flex items-center justify-between rounded-md border p-3">
+                <div className="space-y-0.5">
+                  <Label className="text-sm font-medium">Send email notification to candidate</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Notify the candidate by email when scheduling.
+                  </p>
+                </div>
+                <Switch
+                  checked={scheduleSendEmail}
+                  onCheckedChange={setScheduleSendEmail}
+                />
+              </div>
+
+              {scheduleSendEmail && (
+                <div className="grid gap-3">
+                  <div className="grid gap-2">
+                    <Label htmlFor="email-subject">Subject</Label>
+                    <Input
+                      id="email-subject"
+                      value={scheduleEmailSubject}
+                      onChange={(e) => setScheduleEmailSubject(e.target.value)}
+                      placeholder="Interview scheduled for {job_title}"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="email-body">Body</Label>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleGenerateScheduleEmail}
+                        disabled={scheduleEmailDrafting}
+                      >
+                        {scheduleEmailDrafting ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <Sparkles className="w-4 h-4 mr-2" />
+                        )}
+                        Generate with AI
+                      </Button>
+                    </div>
+                    <textarea
+                      id="email-body"
+                      className="flex min-h-[160px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      value={scheduleEmailBody}
+                      onChange={(e) => setScheduleEmailBody(e.target.value)}
+                      placeholder="Write the email body or click Generate with AI..."
+                    />
+                  </div>
+                </div>
+              )}
+
               <div className="flex justify-end gap-3">
                 <Button variant="outline" onClick={() => setSelectedApplicant(null)}>
                   Cancel
                 </Button>
-                <Button onClick={handleScheduleInterview} disabled={!interviewDate || !interviewTime}>
+                <Button
+                  onClick={handleScheduleInterview}
+                  disabled={
+                    !interviewDate ||
+                    !interviewTime ||
+                    (scheduleSendEmail && (!scheduleEmailSubject || !scheduleEmailBody))
+                  }
+                >
                   Confirm Schedule
                 </Button>
               </div>

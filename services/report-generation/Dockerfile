@@ -21,4 +21,4 @@ COPY . .
 EXPOSE 8012
 
 # Run application (explicit list format = better signal handling)
-CMD ["sh", "-c", "gunicorn -k uvicorn.workers.UvicornWorker -w 2 -b 0.0.0.0:${PORT:-8012} app.main:app"]
+CMD ["sh", "-c", "gunicorn -k uvicorn.workers.UvicornWorker -w 2 --timeout 300 -b 0.0.0.0:${PORT:-8012} app.main:app"]
