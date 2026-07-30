@@ -12,7 +12,7 @@ load_dotenv()
 class OpenRouterChat:
     """Wrapper for OpenRouter API (OpenAI-compatible)."""
 
-    def __init__(self, model_name: str = "openai/gpt-oss-120b:free"):
+    def __init__(self, model_name: str = "meta-llama/llama-3.1-8b-instruct:free"):
         api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:
             raise ValueError("OPENROUTER_API_KEY environment variable not set")

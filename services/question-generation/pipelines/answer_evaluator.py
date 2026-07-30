@@ -1,4 +1,4 @@
-﻿import json
+import json
 import re
 import sys
 from typing import Dict, Optional, Tuple
@@ -8,7 +8,7 @@ sys.path.insert(0, "/app")
 import numpy as np
 from pipelines.llm_loader import GeminiEmbedder
 
-from shared.llm_client import LLMClient
+from pipelines.llm_client import LLMClient
 from pipelines.llm_loader import LLMLoader, get_default_chat
 
 

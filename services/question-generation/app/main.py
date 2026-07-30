@@ -16,7 +16,7 @@ import sys
 sys.path.insert(0, "/app")
 sys.path.append(str(Path(__file__).parent.parent))
 
-from shared.llm_client import LLMClient
+from pipelines.llm_client import LLMClient
 from pipelines.llm_loader import get_embedder, get_default_chat
 from pipelines.answer_evaluator import AnswerEvaluator
 from pipelines.orchestrator import InterviewOrchestrator
@@ -38,8 +38,8 @@ async def lifespan(app: FastAPI):
 
     logger.info("Initialising interview service…")
 
-    # LLM and embedder are now lazy-loaded from shared/ on first use
-    logger.info("Shared LLM and embedding providers configured")
+    # LLM and embedder are lazy-loaded on first use
+    logger.info("LLM and embedding providers configured")
 
     dataset_path = Path("data/software_questions.csv")
     with open(dataset_path, newline="", encoding="latin1") as f:

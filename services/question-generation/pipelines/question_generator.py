@@ -1,4 +1,4 @@
-﻿import json
+import json
 import random
 import re
 import sys
@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Tuple
 
 sys.path.insert(0, "/app")
 
-from shared.llm_client import LLMClient
+from pipelines.llm_client import LLMClient
 from pipelines.llm_loader import LLMLoader, get_default_chat
 
 _FOLLOWUP_ANGLE_MAP = {

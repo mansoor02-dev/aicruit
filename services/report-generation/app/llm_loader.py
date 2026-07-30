@@ -1,6 +1,7 @@
 """
-LLM loader — same pattern as question-generation service.
-Supports Gemini (primary) with OpenRouter fallback.
+LLM loader — uniform 2-tier strategy.
+Primary: Gemini 2.5 Flash (direct Google GenAI SDK).
+Fallback: Llama 3.1 8B Instruct (via OpenRouter).
 """
 
 import json
@@ -30,7 +31,7 @@ _RETRY_BASE_DELAY = 5  # seconds
 class OpenRouterChat:
     """OpenRouter API (OpenAI-compatible)."""
 
-    def __init__(self, model_name: str = "arcee-ai/trinity-large-preview:free"):
+    def __init__(self, model_name: str = "meta-llama/llama-3.1-8b-instruct:free"):
         api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:
             raise ValueError("OPENROUTER_API_KEY environment variable not set")
@@ -72,11 +73,10 @@ class OpenRouterChat:
 class GeminiChat:
     """Google Gemini API wrapper.
 
-    Uses gemini-2.0-flash by default (1 500 RPD on the free tier).
-    gemini-2.5-flash only allows 20 RPD on the free tier — avoid it.
+    Uses gemini-2.5-flash by default (primary model for all services).
     """
 
-    def __init__(self, model_name: str = "gemini-2.0-flash"):
+    def __init__(self, model_name: str = "gemini-2.5-flash"):
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             raise ValueError("GEMINI_API_KEY environment variable not set")
@@ -139,12 +139,14 @@ class LLMLoader:
         if self._llm is not None:
             return self._llm
 
-        if self.model_type == "openrouter":
-            self._llm = OpenRouterChat().create_chat_completion
-            logger.info("Loaded OpenRouter LLM")
-        else:
+        # Prefer Gemini when key is available, regardless of requested type,
+        # falling back to OpenRouter only when Gemini is unconfigured.
+        if os.getenv("GEMINI_API_KEY"):
             self._llm = GeminiChat().create_chat_completion
-            logger.info("Loaded Gemini LLM")
+            logger.info("Loaded Gemini LLM (primary)")
+        else:
+            self._llm = OpenRouterChat().create_chat_completion
+            logger.info("Loaded OpenRouter LLM (fallback)")
 
         return self._llm
 

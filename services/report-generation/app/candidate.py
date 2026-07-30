@@ -2,14 +2,12 @@
 Candidate feedback generation logic — uses LLM for personalised feedback.
 """
 
-import sys
 import json
-sys.path.insert(0, "/app")
 
 from typing import List
 
 from .models import ScoredEntry, CandidateReport
-from shared.llm_client import LLMClient
+from .llm_client import LLMClient
 
 
 _CANDIDATE_PROMPT = """You are a friendly career coach giving feedback to an interview candidate.

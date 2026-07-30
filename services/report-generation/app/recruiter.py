@@ -2,15 +2,13 @@
 Recruiter report generation logic — uses LLM for personalised overall remark.
 """
 
-import sys
 import json
-sys.path.insert(0, "/app")
 
 from typing import List
 
 from .models import ScoredEntry, RecruiterReport, CategoryScore
 from .processor import compute_overall_score, compute_category_scores
-from shared.llm_client import LLMClient
+from .llm_client import LLMClient
 
 
 _REMARK_PROMPT = """You are an expert HR analyst writing a concise summary for a recruiter.

@@ -1,7 +1,5 @@
-import sys
 import os
 import logging
-sys.path.insert(0, "/app")
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,7 +8,7 @@ from typing import List, Optional
 import pdfplumber
 import io
 
-from shared.llm_client import LLMClient
+from app.llm_client import LLMClient
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

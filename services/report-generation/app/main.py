@@ -9,14 +9,14 @@ from functools import partial
 
 from fastapi import FastAPI, HTTPException
 
-import sys
-sys.path.insert(0, "/app")
+
+
 
 from .models import ReportRequest, ReportResponse
 from .processor import score_all_entries
 from .recruiter import build_recruiter_report
 from .candidate import build_candidate_report
-from shared.llm_client import LLMClient
+from .llm_client import LLMClient
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO)
@@ -29,7 +29,7 @@ app = FastAPI(
     version="2.0.0",
 )
 
-# LLM is lazy-loaded from shared/ on first request
+# LLM is lazy-loaded on first request
 _llm_client = None
 
 # ── Routes ───────────────────────────────────────────────────────────────────

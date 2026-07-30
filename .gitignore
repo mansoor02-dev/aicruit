@@ -11,3 +11,11 @@ directory_tree.md
 script.txt
 # GCP deployment secrets
 scripts/gcp/.gcp-secrets.env
+*.pdf
+CLAUDE.md
+AGENTS.md
+*.txt
+DEPLOY.md
+CODE_QUALITY_REPORT.md
+.claude
+summary.md

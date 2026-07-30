@@ -3,16 +3,14 @@ Aggregation logic — works on ScoredEntry list (already scored 0–10).
 Also handles LLM-based scoring of raw entries.
 """
 
-import sys
-sys.path.insert(0, "/app")
-
-from typing import Dict, List, Tuple
 import json
+from typing import Dict, List, Tuple
 from pydantic import BaseModel
+
 
 from .models import QuestionEntry, ScoredEntry
 from .utils import clamp, scale_to_ten
-from shared.llm_client import LLMClient
+from .llm_client import LLMClient
 
 
 # ── LLM-based scoring ───────────────────────────────────────────────────────
