@@ -5,9 +5,8 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-# Runtime system deps for pymupdf, python-docx, pytesseract image OCR, libmagic
+# Runtime system dependency for pytesseract image OCR.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libmagic1 \
     tesseract-ocr \
     && rm -rf /var/lib/apt/lists/*
 

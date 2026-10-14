@@ -3,5 +3,5 @@ uvicorn>=0.29.0
 gunicorn
 pydantic>=2.0.0
 python-dotenv>=1.0.1
-openai>=1.57.2
 google-genai>=0.2.2
+langchain-core>=0.3.0,<2.0.0

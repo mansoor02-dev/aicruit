@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import datetime
 from pathlib import Path
@@ -7,11 +8,12 @@ import pandas as pd
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
 
-from pipelines.answer_evaluator import AnswerEvaluator
-from pipelines.llm_loader import get_embedder
-from pipelines.conversation_manager import ConversationManager
-from pipelines.flow_controller import FlowController
-from pipelines.question_generator import QuestionGenerator
+from app.pipelines.conversation_manager import ConversationManager
+from app.pipelines.flow_controller import FlowController
+from app.services.answer_evaluator import AnswerEvaluator
+from app.services.embedding import get_embedder
+from app.services.llm_client import LLMClient
+from app.services.question_generator import QuestionGenerator
 
 
 # ---------------------------------------------------------------------------
@@ -65,7 +67,7 @@ def load_questions(csv_path: Path) -> list:
 # Interview loop
 # ---------------------------------------------------------------------------
 
-def run_interview() -> None:
+async def run_interview() -> None:
     Config.ensure_dirs()
 
     print("=" * 70)
@@ -75,13 +77,20 @@ def run_interview() -> None:
     # --- Initialisation ---
     questions = load_questions(Config.CSV_PATH)
 
-    embedder = get_embedder(Config.EMBED_MODEL)
+    embedder = get_embedder()
 
     print("\nInitialising interview components…")
     conversation    = ConversationManager(total_questions=Config.TOTAL_QUESTIONS)
     flow_controller = FlowController(max_followups_per_topic=Config.MAX_FOLLOWUPS)
-    question_gen    = QuestionGenerator(model_type="openrouter", dataset_questions=questions)
-    evaluator       = AnswerEvaluator(embedder=embedder, model_type="openrouter")
+    llm_client      = LLMClient()
+    question_gen    = QuestionGenerator(
+        dataset_questions=questions,
+        llm_client=llm_client,
+    )
+    evaluator       = AnswerEvaluator(
+        embedder=embedder,
+        llm_client=llm_client,
+    )
     print("✓ All components ready\n")
 
     print("=" * 70)
@@ -112,14 +121,14 @@ def run_interview() -> None:
         is_followup = decision.action == "followup"
 
         if is_followup:
-            question_text, metadata = question_gen.generate_followup_question(
+            question_text, metadata = await question_gen.generate_followup_question(
                 previous_question=last_turn.question,
                 previous_answer=last_turn.answer,
                 evaluation_result=last_turn.evaluation,
             )
             topic = last_turn.topic
         else:
-            question_text, metadata = question_gen.generate_new_topic_question(
+            question_text, metadata = await question_gen.generate_new_topic_question(
                 topics_covered=conversation.get_topics_covered_list(),
                 difficulty=Config.DIFFICULTY,
             )
@@ -144,7 +153,7 @@ def run_interview() -> None:
 
         # --- Single combined evaluation call (score + flow decision) ---
         print("\nEvaluating your answer…")
-        evaluation, flow = evaluator.evaluate_combined(
+        evaluation, flow = await evaluator.evaluate_combined(
             question=question_text,
             user_answer=user_answer,
             reference_answer=metadata.get("reference_answer"),
@@ -211,7 +220,7 @@ def run_interview() -> None:
 
 if __name__ == "__main__":
     try:
-        run_interview()
+        asyncio.run(run_interview())
     except KeyboardInterrupt:
         print("\n\nInterview interrupted by user (Ctrl+C)")
     except Exception as e:

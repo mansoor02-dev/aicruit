@@ -1,0 +1,104 @@
+{
+  "source": "3.pdf",
+  "provider": "Gemini via LangChain structured extraction with JSON fallback",
+  "result": {
+    "personal_info": {
+      "name": "SEAN PRICE",
+      "email": "email@email.com",
+      "phone": "3868683442",
+      "linkedin": "",
+      "github": "",
+      "location": "Los Angeles, CA 90291 United States"
+    },
+    "skills": [
+      "MHE",
+      "PKMS",
+      "CLI Terminals",
+      "Printers",
+      "Silex Printer boxes",
+      "CPUs",
+      "Laptops",
+      "Network Security",
+      "IT Project Management",
+      "Business Administration",
+      "Strategy & Operations",
+      "IT Innovation",
+      "Ethical Hacking",
+      "Database Management",
+      "Software/Hardware Troubleshooting",
+      "Risk Management",
+      "System Enhancements"
+    ],
+    "experience": [
+      {
+        "title": "IT Consultant",
+        "company": "Amazon",
+        "duration": "Jan 2020 - Jun 2021",
+        "description": [
+          "Administered first-level MHE and PKMS support and under-provided SOPs to make appropriate corrections when necessary. Researched and documented existing and new processes for IT Support Teams and interacted with business users and other IT groups to ascertain business requirements and design proposed system enhancements. Communicated issues, resolutions, and the project status to IT management and user community and ensured the deadlines were met and quality was maximized. Deployed, reset, configured, and replaced equipment as needed, such as CLI Terminals, Printers, Silex Printer boxes., CPUs and laptops. Coached newly hired IT specialists on advanced technical procedures."
+        ]
+      },
+      {
+        "title": "IT Consultant",
+        "company": "PWC",
+        "duration": "Jan 2019 - Dec 2021",
+        "description": [
+          "Identified software and hardware issues and listened to client concerns. Encouraged timely and relevant upgrades for client products when necessary. Devised a workable scheme to accomplish business objectives. Scheduled and allocated project activities, identified tools, standards, and guidelines suitable for projects. Provided risk management by monitoring project schedules. Reported on a project's status regularly through emails and weekly meetings; formally tracked problems and issues to closure."
+        ]
+      }
+    ],
+    "education": [
+      {
+        "degree": "Bachelor of Science in Information Systems Management",
+        "institution": "Miami University",
+        "duration": "Jan 2020 - Jun 2021",
+        "location": "Miami Beach"
+      }
+    ],
+    "projects": [],
+    "certifications": [
+      {
+        "name": "CompTIA A+",
+        "issuer": "",
+        "date": ""
+      },
+      {
+        "name": "Microsoft Certified Solutions Expert",
+        "issuer": "Microsoft",
+        "date": "Jan 2020 - Jun 2021"
+      },
+      {
+        "name": "CCNA Routing and Switching",
+        "issuer": "Cisco",
+        "date": "Jan 2019 - Aug 2019"
+      }
+    ],
+    "publications": [],
+    "interests": [
+      "Angling",
+      "Sailing",
+      "Fly Fishing"
+    ],
+    "languages": [
+      "English",
+      "French"
+    ]
+  },
+  "metrics": {
+    "elapsed_seconds": 13.91,
+    "total_pages": 2,
+    "native_pages": 2,
+    "ocr_pages": 0,
+    "empty_pages": 0,
+    "original_word_count": 436,
+    "final_word_count": 436,
+    "was_truncated": false,
+    "cached": false,
+    "content_hash": "c6102ba71052c57214369f9048226cf6dfaaff001ecd3dc7170a36c0a5562b59"
+  },
+  "warnings": {
+    "extraction": [],
+    "validation": [],
+    "corrections": []
+  }
+}

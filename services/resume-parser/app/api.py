@@ -1,23 +1,66 @@
-import os
+"""
+Resume Parser API — FastAPI routes.
 
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+Entry point: gunicorn app.api:app -k uvicorn.workers.UvicornWorker
+
+Routes:
+  POST /parse          — Upload a PDF/DOCX and get structured resume data.
+  POST /parse-resume   — Fetch a resume from DB by ID, parse, and save back.
+  POST /score-fit      — Score a resume against a job description.
+  GET  /health         — Health check.
+  GET  /readiness      — Readiness check (verifies LLM provider is configured).
+  GET  /               — Root / docs redirect.
+"""
+
+import os
+import logging
+import time
+
+from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from typing import Optional
 import json
-import time
 import requests
 from dotenv import load_dotenv
 
-from app.ingestion import ingest_bytes
-from app.cleaner import clean_text
-from app.inference import run_inference, run_score_inference
-from app.validator import validate
+from app.core.config import get_settings
+from app.schemas.resume import (
+    ParseResumeByIdRequest,
+    ParseResumeByIdResponse,
+    ScoreFitRequest,
+    ScoreFitResponse,
+)
+from app.services.resume_pipeline import (
+    PipelineError,
+    FileValidationError,
+    ExtractionFailedError,
+    LLMFailedError,
+    parse_resume,
+)
+# Keep existing inference for /score-fit backward compatibility
+from app.inference import run_score_inference
 from app.db import get_db_session, Resume, init_db
 
 load_dotenv()
 
-app = FastAPI(title="Resume Parser API", version="1.0.0")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(name)s %(levelname)s %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+app = FastAPI(title="Resume Parser API", version="2.0.0")
+
+# ── Settings ──────────────────────────────────────────────────────────────
+
+settings = get_settings()
+FILE_SERVICE_URL = settings.file_service_url
+
+# Initialise DB tables on startup
+init_db()
+
+
+# ── Score-fit prompt (preserved from original) ────────────────────────────
 
 SCORE_SYSTEM_PROMPT = """You are a hiring assistant evaluating how well a candidate's resume matches a job posting.
 
@@ -59,107 +102,88 @@ Rules:
 """
 
 
-class ScoreFitRequest(BaseModel):
-    resume: dict
-    job: dict
-
-
-class ScoreFitResponse(BaseModel):
-    overall: int
-    skills_match: int
-    experience_match: int
-    education_match: int
-    project_match: int
-    rationale: str
-
-
-@app.post("/score-fit", response_model=ScoreFitResponse)
-def score_fit(req: ScoreFitRequest):
-    user_payload = f"Job:\n{json.dumps(req.job, indent=2)}\n\nResume:\n{json.dumps(req.resume, indent=2)}"
-    try:
-        raw = run_score_inference(SCORE_SYSTEM_PROMPT, user_payload)
-    except Exception as e:
-        raise HTTPException(status_code=502, detail="scoring_unavailable") from e
-
-    if not isinstance(raw, dict) or "overall" not in raw:
-        raise HTTPException(status_code=502, detail="scoring_unavailable")
-
-    def clamp(v):
-        try:
-            return max(0, min(100, int(v)))
-        except (TypeError, ValueError):
-            raise HTTPException(status_code=502, detail="scoring_unavailable")
-
-    return ScoreFitResponse(
-        overall=clamp(raw.get("overall")),
-        skills_match=clamp(raw.get("skills_match", 0)),
-        experience_match=clamp(raw.get("experience_match", 0)),
-        education_match=clamp(raw.get("education_match", 0)),
-        project_match=clamp(raw.get("project_match", 0)),
-        rationale=str(raw.get("rationale") or ""),
-    )
-
-# File service URL — set via env var on Railway
-FILE_SERVICE_URL = os.getenv("FILE_SERVICE_URL", "http://localhost:8005")
-
-# Initialise DB tables on startup
-init_db()
-
+# ── Health & readiness ────────────────────────────────────────────────────
 
 @app.get("/health")
 async def health():
     return {"status": "ok"}
 
+
+@app.get("/readiness")
+async def readiness():
+    """Readiness check — verifies LLM provider is configured."""
+    s = get_settings()
+    issues = []
+    if not s.gemini_api_key:
+        issues.append("GEMINI_API_KEY not configured")
+    if issues:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "not_ready", "issues": issues},
+        )
+    return {"status": "ready"}
+
+
 @app.get("/")
 async def root():
     return {"message": "Go to the /docs"}
 
+
+# ── POST /parse — Upload & parse ──────────────────────────────────────────
+
 @app.post("/parse")
-async def parse_resume(
-    file: UploadFile = File(...)
+async def parse_resume_upload(
+    file: UploadFile = File(...),
 ):
+    """
+    Parse an uploaded PDF/DOCX resume and return structured data.
+
+    Returns:
+        JSON with filename, elapsed_seconds, and resume dict matching
+        the established schema (personal_info, skills, experience, etc.)
+    """
     filename = file.filename or ""
     ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
 
     if ext not in {".pdf", ".docx"}:
-        raise HTTPException(status_code=400, detail=f"Unsupported file type '{ext}'. Use PDF or DOCX.")
-    contents = await file.read()
-    if len(contents) > 10 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="File exceeds 10 MB limit.")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type '{ext}'. Use PDF or DOCX.",
+        )
 
-    start = time.perf_counter()
+    contents = await file.read()
+
+    if len(contents) > settings.max_file_size_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File exceeds {settings.max_file_size_mb} MB limit.",
+        )
+
     try:
-        raw_text = ingest_bytes(contents, ext)
-        cleaned = clean_text(raw_text)
-        raw_json = run_inference(cleaned)
-        result = validate(raw_json)
+        result = await parse_resume(contents, ext, settings)
+    except FileValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ExtractionFailedError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except LLMFailedError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except PipelineError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        logger.error("parse.unexpected_error", extra={"error": str(exc)})
+        raise HTTPException(
+            status_code=500,
+            detail="An unexpected error occurred during parsing.",
+        )
 
     return JSONResponse(content={
         "filename": filename,
-        "elapsed_seconds": round(time.perf_counter() - start, 2),
-        "resume": result,
+        "elapsed_seconds": result.elapsed_seconds,
+        "resume": result.data,
     })
 
 
-# ---------------------------------------------------------------------------
-# Request / Response models
-# ---------------------------------------------------------------------------
-
-class ParseResumeByIdRequest(BaseModel):
-    resume_id: str
-
-
-class ParseResumeByIdResponse(BaseModel):
-    id: str
-    message: str
-    skills: list
-
-
-# ---------------------------------------------------------------------------
-# /parse-resume  — fetch from DB, parse, save back
-# ---------------------------------------------------------------------------
+# ── POST /parse-resume — Fetch from DB, parse, save ──────────────────────
 
 @app.post("/parse-resume", response_model=ParseResumeByIdResponse)
 async def parse_resume_by_id(request: ParseResumeByIdRequest):
@@ -200,7 +224,7 @@ async def parse_resume_by_id(request: ParseResumeByIdRequest):
                 break
         if file_url.startswith("/"):
             file_url = f"{FILE_SERVICE_URL}{file_url}"
-            
+
         # Fix file service mount path: /uploads is served at /static
         if "/uploads/" in file_url:
             file_url = file_url.replace("/uploads/", "/static/", 1)
@@ -210,7 +234,10 @@ async def parse_resume_by_id(request: ParseResumeByIdRequest):
             resp = requests.get(file_url, timeout=30)
             resp.raise_for_status()
         except requests.RequestException as e:
-            raise HTTPException(status_code=502, detail=f"Failed to download resume file: {e}")
+            raise HTTPException(
+                status_code=502,
+                detail=f"Failed to download resume file: {e}",
+            )
 
         # Determine extension from URL or Content-Type
         url_path = file_url.split("?")[0]
@@ -219,23 +246,31 @@ async def parse_resume_by_id(request: ParseResumeByIdRequest):
         else:
             ext = ".pdf"  # default
 
-        # Parse
-        start = time.perf_counter()
+        # Parse using new pipeline
         try:
-            raw_text = ingest_bytes(resp.content, ext)
-            cleaned = clean_text(raw_text)
-            raw_json = run_inference(cleaned)
-            result = validate(raw_json)
+            result = await parse_resume(resp.content, ext, settings)
+        except FileValidationError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except ExtractionFailedError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+        except LLMFailedError as e:
+            raise HTTPException(status_code=502, detail=str(e))
+        except PipelineError as e:
+            raise HTTPException(status_code=e.status_code, detail=str(e))
         except Exception as exc:
-            raise HTTPException(status_code=500, detail=f"Parsing failed: {exc}")
+            logger.error("parse_by_id.unexpected_error", extra={"error": str(exc)})
+            raise HTTPException(
+                status_code=500,
+                detail="Parsing failed due to an unexpected error.",
+            )
 
-        elapsed = round(time.perf_counter() - start, 2)
-        skills: list = result.get("skills", []) if isinstance(result, dict) else []
+        parsed_data = result.data
+        skills: list = parsed_data.get("skills", []) if isinstance(parsed_data, dict) else []
 
         # Persist result back to DB
         try:
             resume_row.parsed_skills = {"skills": skills}
-            resume_row.parsed_text = json.dumps(result)
+            resume_row.parsed_text = json.dumps(parsed_data)
             session.commit()
             session.refresh(resume_row)
         except Exception as update_err:
@@ -247,13 +282,44 @@ async def parse_resume_by_id(request: ParseResumeByIdRequest):
 
         return ParseResumeByIdResponse(
             id=request.resume_id,
-            message=f"Resume parsed successfully in {elapsed}s",
+            message=f"Resume parsed successfully in {result.elapsed_seconds}s",
             skills=skills,
         )
 
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("parse_by_id.error", extra={"error": str(e)})
+        raise HTTPException(status_code=500, detail="An unexpected error occurred.")
     finally:
         session.close()
+
+
+# ── POST /score-fit — Score resume vs job ─────────────────────────────────
+
+@app.post("/score-fit", response_model=ScoreFitResponse)
+def score_fit(req: ScoreFitRequest):
+    """Score how well a resume matches a job description."""
+    user_payload = f"Job:\n{json.dumps(req.job, indent=2)}\n\nResume:\n{json.dumps(req.resume, indent=2)}"
+    try:
+        raw = run_score_inference(SCORE_SYSTEM_PROMPT, user_payload)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail="scoring_unavailable") from e
+
+    if not isinstance(raw, dict) or "overall" not in raw:
+        raise HTTPException(status_code=502, detail="scoring_unavailable")
+
+    def clamp(v):
+        try:
+            return max(0, min(100, int(v)))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=502, detail="scoring_unavailable")
+
+    return ScoreFitResponse(
+        overall=clamp(raw.get("overall")),
+        skills_match=clamp(raw.get("skills_match", 0)),
+        experience_match=clamp(raw.get("experience_match", 0)),
+        education_match=clamp(raw.get("education_match", 0)),
+        project_match=clamp(raw.get("project_match", 0)),
+        rationale=str(raw.get("rationale") or ""),
+    )

@@ -2,6 +2,7 @@
 node_modules/
 __pycache__/
 *.pyc
+# Ignore local environment files at any directory level.
 .env
 *.env.local
 .env.*.local
@@ -19,3 +20,4 @@ DEPLOY.md
 CODE_QUALITY_REPORT.md
 .claude
 summary.md
+services/resume-parser/.env

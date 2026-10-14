@@ -1,0 +1,94 @@
+{
+  "source": "5.pdf",
+  "provider": "Gemini via LangChain structured extraction with JSON fallback",
+  "result": {
+    "personal_info": {
+      "name": "Kristen Connelly",
+      "email": "email@email.com",
+      "phone": "3868683442",
+      "linkedin": "LinkedIn",
+      "github": "",
+      "location": "1515 Pacific Ave Los Angeles, CA 90291 United States"
+    },
+    "skills": [
+      "Call Sheets & Sides",
+      "Adobe Premiere Pro",
+      "Camera Boom, Light Boom, Mic Boom",
+      "DaVinci Resolve"
+    ],
+    "experience": [
+      {
+        "title": "Video Production Assistant",
+        "company": "Blue Penguin Designs",
+        "duration": "F E B R UA RY 2 0 2 1 - P R E S E N T",
+        "description": [
+          "Responsible for supporting a large scale production team of 100 people, throughout production, including development, pre-production, post-production, principal photography, and distribution. Managed the bookings for guests, the green room traffic, and any guest suites. Researched story ideas and then compiled footnotes and gathered footage for presentation. Completed Video Production-scriptwriting, audio editing, and mixing using the Avid non-linear editing system. Maintained and assisted with Production Acquisition."
+        ]
+      },
+      {
+        "title": "Video Production Assistant",
+        "company": "Botle Bob Advertising",
+        "duration": "J A N UA RY 2 0 1 9 - F E B R U A RY 2 0 2 1",
+        "description": [
+          "Responsible for organizing and preparing visual and audio equipment to be used on video projects for clients such as Pfizer, Knoll Pharmaceuticals, and Merck. Helped edit graphics and video projects from conception to creation. Collaborated with the production team to provide content, digital assets, presentations, and other video needs. Built, edited, and polished videography proposals for business clients. Staged and set up audio and video equipment for studio and on-location shoots. Performed minor maintenance on video and audio equipment and managed any required vendor repair."
+        ]
+      }
+    ],
+    "education": [
+      {
+        "degree": "BA in Film and Television",
+        "institution": "Boston University",
+        "duration": "F E B R UA RY 2 0 2 1 - P R E S E N T",
+        "location": "Boston"
+      },
+      {
+        "degree": "Advanced Course in Digital Video Editing",
+        "institution": "ADMEC Multimedia Institute",
+        "duration": "J A N UA RY 2 0 1 8 - J U LY 2 0 1 8",
+        "location": "Online"
+      }
+    ],
+    "projects": [],
+    "certifications": [
+      {
+        "name": "Hootsuite Certified Professional",
+        "issuer": "Hootsuite Media",
+        "date": "J A N UA RY 2 0 2 0 - F E B R UA RY 2 0 2 1"
+      },
+      {
+        "name": "Adobe CS5 Certified",
+        "issuer": "University of Delaware",
+        "date": "J A N UA RY 2 0 2 0 - D E C E M B E R 2 0 2 0"
+      }
+    ],
+    "publications": [],
+    "interests": [
+      "Mountainbiking",
+      "Track Athletics",
+      "Choir"
+    ],
+    "languages": [
+      "English",
+      "Dutch; Flemish"
+    ]
+  },
+  "metrics": {
+    "elapsed_seconds": 12.22,
+    "total_pages": 1,
+    "native_pages": 1,
+    "ocr_pages": 0,
+    "empty_pages": 0,
+    "original_word_count": 486,
+    "final_word_count": 486,
+    "was_truncated": false,
+    "cached": false,
+    "content_hash": "3e8dda0f53dc107973817ecdceeac5c83b5b41be45634466e3bb95d1b2942549"
+  },
+  "warnings": {
+    "extraction": [],
+    "validation": [
+      "linkedin URL is malformed: 'LinkedIn'"
+    ],
+    "corrections": []
+  }
+}

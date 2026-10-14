@@ -116,7 +116,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://admin:admin123@postgres:5432/aicruit}
       FILE_SERVICE_URL: http://file-service:8005
       FRONTEND_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
-      LLM_PRIMARY_MODEL: ${LLM_PRIMARY_MODEL:-google/gemini-flash-2.0}
+      LLM_PRIMARY_MODEL: ${LLM_PRIMARY_MODEL:-gemini-2.5-flash}
       LLM_FALLBACK_MODEL: ${LLM_FALLBACK_MODEL:-meta-llama/llama-3.1-8b-instruct:free}
     depends_on:
       postgres:
@@ -192,7 +192,8 @@ services:
     ports:
       - "8007:8007"
     env_file:
-      - ../../services/transcribe-audio/app/.env
+      - path: ../../services/transcribe-audio/app/.env
+        required: false
     environment:
       UPLOAD_DIR: /tmp/uploads
       FRONTEND_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
@@ -276,7 +277,8 @@ services:
     ports:
       - "8012:8012"
     env_file:
-      - ../../services/report-generation/.env
+      - path: ../../services/report-generation/.env
+        required: false
     environment:
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"

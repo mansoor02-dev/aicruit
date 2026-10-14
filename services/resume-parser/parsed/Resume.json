@@ -1,0 +1,103 @@
+{
+  "source": "Resume.pdf",
+  "provider": "Gemini via LangChain structured extraction with JSON fallback",
+  "result": {
+    "personal_info": {
+      "name": "Sarmad Majeed Abbasi",
+      "email": "sarmadabbasi073@gmail.com",
+      "phone": "+92 3169180604",
+      "linkedin": "linkedin.com/in/sarmad-abbasi/",
+      "github": "github.com/sarmadabbasi",
+      "location": "Islamabad, Pakistan"
+    },
+    "skills": [
+      "React.js",
+      "Redux Toolkit",
+      "Tailwind CSS",
+      "HTML5",
+      "CSS3",
+      "JavaScript (ES6+)",
+      "Node.js",
+      "Express.js",
+      "REST APIs",
+      "Socket.IO",
+      "MongoDB",
+      "MySQL",
+      "Git",
+      "GitHub",
+      "Render",
+      "Vercel",
+      "Postman",
+      "VSCode",
+      "Cloudinary",
+      "JWT",
+      "bcrypt",
+      "Responsive Design"
+    ],
+    "experience": [
+      {
+        "title": "Web Developer",
+        "company": "National University of Sciences and Technology (NUST)",
+        "duration": "Aug 2023 - Present",
+        "description": [
+          "Developed responsive front-end interfaces using React.js, and implemented secure RESTful APIs with Node.js and Express.js. Used MongoDB for efficient storage and retrieval of event data, registrations, and user information."
+        ]
+      }
+    ],
+    "education": [
+      {
+        "degree": "Bachelor's degree, Software Engineering",
+        "institution": "National University of Science and Technology (NUST)",
+        "duration": "Aug 2022 - Aug 2026",
+        "location": "Islamabad, Pakistan"
+      }
+    ],
+    "projects": [
+      {
+        "name": "TaskNest - Productivity Web App",
+        "tech": "React.js, Redux Toolkit, Node.js, Express.js, MongoDB, JWT, Tailwind CSS",
+        "description": [
+          "Built a full-stack task management platform enabling users to create, prioritize, and track to-do items. Implemented JWT-based authentication and role-based access control for secure user sessions. Integrated drag-and-drop task boards using React DnD for an intuitive UI. Employed Redux Toolkit to manage complex application state across user dashboards."
+        ]
+      },
+      {
+        "name": "Pam England Sculpture Studio Website (Laravel)",
+        "tech": "Laravel, PHP, MySQL, Blade, Bootstrap",
+        "description": [
+          "Developed a dynamic portfolio website for a sculpture artist using the Laravel framework. Integrated a MySQL database to manage sculpture listings, artist bio, and contact form submissions. Used Blade templating and Bootstrap to create a responsive, visually appealing frontend. Implemented admin dashboard for content management, enabling real-time updates of artwork details."
+        ]
+      },
+      {
+        "name": "Spotify and Netflix Frontend Clones",
+        "tech": "React.js, Tailwind CSS, JavaScript",
+        "description": [
+          "Recreated responsive UI clones of Spotify and Netflix with pixel-perfect layouts. Emulated dynamic components like horizontal scroll carousels, media previews, and navbar transitions. Practiced reusable component architecture and responsive styling using Tailwind CSS."
+        ]
+      }
+    ],
+    "certifications": [],
+    "publications": [],
+    "interests": [],
+    "languages": []
+  },
+  "metrics": {
+    "elapsed_seconds": 9.98,
+    "total_pages": 1,
+    "native_pages": 1,
+    "ocr_pages": 0,
+    "empty_pages": 0,
+    "original_word_count": 329,
+    "final_word_count": 329,
+    "was_truncated": false,
+    "cached": false,
+    "content_hash": "a5429a42dd63c46a63463c83c5d4a9324a7f58f35f2182ad0528393551c04399"
+  },
+  "warnings": {
+    "extraction": [],
+    "validation": [
+      "linkedin URL is malformed: 'linkedin.com/in/sarmad-abbasi/'",
+      "github URL is malformed: 'github.com/sarmadabbasi'"
+    ],
+    "corrections": []
+  }
+}

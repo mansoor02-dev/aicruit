@@ -1,0 +1,200 @@
+{
+  "source": "1.pdf",
+  "provider": "Gemini via LangChain structured extraction with JSON fallback",
+  "result": {
+    "personal_info": {
+      "name": "BILLY PAUL S",
+      "email": "billypaul388@gmail.com",
+      "phone": "+916379487754",
+      "linkedin": "billy-paul-913459270",
+      "github": "billy-paul1234",
+      "location": "Thoothukudi,Tamil Nadu-628002"
+    },
+    "skills": [
+      "Python",
+      "Java",
+      "C++",
+      "C",
+      "Bash",
+      "Shell Script",
+      "LibreOffice",
+      "Docker",
+      "Virtual Box",
+      "Vmware",
+      "Packet Tracer",
+      "GNS3",
+      "Kali Linux",
+      "Ubuntu",
+      "Debian",
+      "Metasploit",
+      "Nmap",
+      "Wireshark",
+      "Ettercap",
+      "Arpspoof",
+      "Tcpdump",
+      "John the Ripper",
+      "Social Engineering Toolkit",
+      "Linux Terminal",
+      "Iptables",
+      "Magisk Manager",
+      "Kali NetHunter",
+      "Andrax",
+      "Termux",
+      "MITM",
+      "ARP Poisoning",
+      "DNS Spoofing",
+      "IP Spoofing",
+      "DDOS Attack",
+      "Evil Twin Attack",
+      "Windows Backdoor",
+      "Windows & Android System Takeover",
+      "Open Port Exploitation",
+      "Phishing Attack",
+      "Brute-Force Attack",
+      "Network Topology & Architecture",
+      "Routing",
+      "Switching",
+      "IPv4",
+      "IPv6",
+      "TCP/IP",
+      "UDP/IP",
+      "VLANs",
+      "Subnetting",
+      "OSPF",
+      "RIP",
+      "EIGRP",
+      "NAT",
+      "PAT",
+      "ICMP",
+      "DHCP",
+      "ARP",
+      "DNS",
+      "NTP",
+      "FTP",
+      "TFTP",
+      "HTTP",
+      "HTTPS",
+      "SMTP",
+      "SSH",
+      "Telnet",
+      "STP",
+      "VTP",
+      "CDP",
+      "LLDP",
+      "Static Routing",
+      "Default Routing",
+      "Dynamic Routing",
+      "Network Configuration",
+      "Network Troubleshooting",
+      "ping",
+      "traceroute",
+      "ifconfig",
+      "nslookup",
+      "arp",
+      "route",
+      "Access Control List (ACL)",
+      "Wireless Networking",
+      "Wi-Fi",
+      "Access Points",
+      "WEP",
+      "WPA",
+      "WPA2",
+      "Network Security",
+      "Port Security",
+      "Telnetlib",
+      "Netmiko",
+      "Paramiko",
+      "Computer Hardware",
+      "Physical Interface & Cabling Types",
+      "Hardware Installation",
+      "Problem Identification in Computer Hardware",
+      "Windows 10",
+      "Windows 11",
+      "ParrotOs",
+      "Alpine Linux",
+      "Puppy Linux",
+      "Tails OS",
+      "Data recovery"
+    ],
+    "experience": [],
+    "education": [
+      {
+        "degree": "SSLC",
+        "institution": "St. Antony's Matric. Hr. Sec. School",
+        "duration": "2019",
+        "location": "Thoothukudi"
+      },
+      {
+        "degree": "HSC (Computer Science)",
+        "institution": "St. Antony's Matric. Hr. Sec. School",
+        "duration": "2021",
+        "location": "Thoothukudi"
+      }
+    ],
+    "projects": [
+      {
+        "name": "RouterRD (Router Redundancy Detection Tool)",
+        "tech": "Bash script, ssmtp, mailutils, ping, cron, Kali Linux, Ubuntu",
+        "description": [
+          "RouterRD tool is used to detect the two router state Which uses HSRP(Hot Standby Routing Protocol) or VRRP(Virtual Router Redundancy Protocol) and send Email if any router is down."
+        ]
+      }
+    ],
+    "certifications": [
+      {
+        "name": "Certified Network Associate",
+        "issuer": "Postulate Info Tech Pvt Ltd.",
+        "date": ""
+      },
+      {
+        "name": "Computer Hardware And Network Technologies",
+        "issuer": "Postulate Info Tech Pvt Ltd.",
+        "date": ""
+      },
+      {
+        "name": "Junior Grade Typewriting English",
+        "issuer": "Government of Tamil Nadu Department of Technical Education, Chennai - 600 025",
+        "date": ""
+      },
+      {
+        "name": "Typing Silver Certificate",
+        "issuer": "WWW.RATATYPE.COM",
+        "date": ""
+      },
+      {
+        "name": "Typing Skills Certificate",
+        "issuer": "TypingTest.com",
+        "date": ""
+      }
+    ],
+    "publications": [],
+    "interests": [
+      "Watching movies",
+      "Keyboard Typing"
+    ],
+    "languages": [
+      "Tamil",
+      "English"
+    ]
+  },
+  "metrics": {
+    "elapsed_seconds": 19.34,
+    "total_pages": 3,
+    "native_pages": 3,
+    "ocr_pages": 0,
+    "empty_pages": 0,
+    "original_word_count": 512,
+    "final_word_count": 512,
+    "was_truncated": false,
+    "cached": false,
+    "content_hash": "53ee454ba0db77e3d6228cd22a8b6115b7d13618dd02d340b9419a6816eaf341"
+  },
+  "warnings": {
+    "extraction": [],
+    "validation": [
+      "linkedin URL is malformed: 'billy-paul-913459270'",
+      "github URL is malformed: 'billy-paul1234'"
+    ],
+    "corrections": []
+  }
+}

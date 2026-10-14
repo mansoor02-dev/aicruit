@@ -1,0 +1,82 @@
+{
+  "source": "Mansoor_Abid_CV.pdf",
+  "provider": "Gemini via LangChain structured extraction with JSON fallback",
+  "result": {
+    "personal_info": {
+      "name": "Mansoor Abid",
+      "email": "mansoorabid0202@gmail.com",
+      "phone": "+92 302 000 0613",
+      "linkedin": "linkedin.com/in/mansoor-abid-",
+      "github": "github.com/Mansoor-Abid",
+      "location": ""
+    },
+    "skills": [
+      "Python",
+      "JavaScript",
+      "Java",
+      "C/C++",
+      "FastAPI",
+      "REST",
+      "PostgreSQL",
+      "MySQL",
+      "MongoDB",
+      "Machine Learning",
+      "Computer Vision",
+      "scikit-learn",
+      "TensorFlow/Keras",
+      "Docker",
+      "System Design",
+      "Agentic AI",
+      "RAG",
+      "LLM"
+    ],
+    "experience": [],
+    "education": [
+      {
+        "degree": "Bachelor of Computer Science",
+        "institution": "National University of Science and Technology (NUST)",
+        "duration": "Sep 2022 - May 2026",
+        "location": "Islamabad, Pakistan"
+      },
+      {
+        "degree": "Intermediate, Pre-Engineering",
+        "institution": "Punjab Group of Colleges (PGC), Lahore",
+        "duration": "Aug 2020 - Aug 2022",
+        "location": "Lahore, Pakistan"
+      }
+    ],
+    "projects": [
+      {
+        "name": "AIcruit",
+        "tech": "Python, FastAPI, PostgreSQL, Docker, System Design, Agentic AI, RAG",
+        "description": [
+          "Designed an AI-driven recruitment platform automating resume screening and interviews to reduce bias and manual effort. Built microservices-based backend with FastAPI, enabling scalable AI-led resume parsing and candidate scoring. Implemented LLM-powered resume extraction and eligibility scoring using structured JSON outputs."
+        ]
+      }
+    ],
+    "certifications": [],
+    "publications": [],
+    "interests": [],
+    "languages": []
+  },
+  "metrics": {
+    "elapsed_seconds": 7.03,
+    "total_pages": 1,
+    "native_pages": 1,
+    "ocr_pages": 0,
+    "empty_pages": 0,
+    "original_word_count": 156,
+    "final_word_count": 156,
+    "was_truncated": false,
+    "cached": false,
+    "content_hash": "4e9222673ec3ed7463cdb95624399f7651992afce52f7e7c96f895ee32ecf075"
+  },
+  "warnings": {
+    "extraction": [],
+    "validation": [
+      "linkedin URL is malformed: 'linkedin.com/in/mansoor-abid-'",
+      "github URL is malformed: 'github.com/Mansoor-Abid'"
+    ],
+    "corrections": []
+  }
+}

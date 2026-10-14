@@ -1,0 +1,99 @@
+{
+  "source": "4.pdf",
+  "provider": "Gemini via LangChain structured extraction with JSON fallback",
+  "result": {
+    "personal_info": {
+      "name": "Mandy Campbell",
+      "email": "email@email.com",
+      "phone": "3868683442",
+      "linkedin": "",
+      "github": "",
+      "location": "1515 Pacific Ave, Los Angeles, CA 90291, United States"
+    },
+    "skills": [
+      "Cardio Training",
+      "Fitness Routines",
+      "HIIT",
+      "Client Assessments",
+      "Health & Safety"
+    ],
+    "experience": [
+      {
+        "title": "Certified Bootcamp Instructor",
+        "company": "Dominist Fitness",
+        "duration": "Jan 2019 - Jul 2021",
+        "description": [
+          "Randailytasks,staffing,andmarketingforthegroupfitnessprogramming.Upheldanactiverapportwithmembers and improved group-class utilization by 18% by redesigning class schedules, approximating annual program budgets, analyzing and reporting program statistics. Instructor and sales associate in a fast-paced fitness business environment. Performed personalized fitness assessments for clients. Received letters of thanks from 50+ happy clients after surpassing their fitness goals. Exceeded sales goals by 29% average per quarter due to creating incredibly positive interactions with clients, producing active word-of-mouth. Used active listening skills to design personalized routines for clients."
+        ]
+      },
+      {
+        "title": "Bootcamp Instructor",
+        "company": "Curves Gym",
+        "duration": "Jul 2021 - Jul 2021",
+        "description": [
+          "Gave new gym members a comprehensive outline of the equipment, going over safety and advantages of a wide array of exercises. Trained individual clients, helping them to achieve their fitness goals with a combination of healthy exercise, lifestyle choices, and nutrition. Created and led strength and conditioning classes every week for up to 20 members, highlighting high-intensity training and education. Designed and instructed stimulating group cycling workouts based on the five heart rate zones."
+        ]
+      }
+    ],
+    "education": [
+      {
+        "degree": "Bachelor's Degree in Exercise Science",
+        "institution": "Concordia University",
+        "duration": "Jul 2021 - Present",
+        "location": "Concordia"
+      },
+      {
+        "degree": "Advanced First Aid Diploma",
+        "institution": "National CPR Foundation",
+        "duration": "Jan 2020 - Jul 2021",
+        "location": "Miami"
+      },
+      {
+        "degree": "High School Diploma",
+        "institution": "Barlow High School",
+        "duration": "Jan 2018 - Dec 2018",
+        "location": "Tennessee"
+      }
+    ],
+    "projects": [],
+    "certifications": [
+      {
+        "name": "CrossFit Level 1 Instructor",
+        "issuer": "",
+        "date": ""
+      },
+      {
+        "name": "Coach's Prep Certified",
+        "issuer": "",
+        "date": ""
+      }
+    ],
+    "publications": [],
+    "interests": [
+      "Skiing",
+      "Hockey",
+      "Knitting"
+    ],
+    "languages": [
+      "English",
+      "Spanish"
+    ]
+  },
+  "metrics": {
+    "elapsed_seconds": 14.54,
+    "total_pages": 2,
+    "native_pages": 2,
+    "ocr_pages": 0,
+    "empty_pages": 0,
+    "original_word_count": 435,
+    "final_word_count": 435,
+    "was_truncated": false,
+    "cached": false,
+    "content_hash": "f87d5aad4bbcf958237c3f65e6b0136d0c88b927e4300bf80807aaabaf6a8bbe"
+  },
+  "warnings": {
+    "extraction": [],
+    "validation": [],
+    "corrections": []
+  }
+}
