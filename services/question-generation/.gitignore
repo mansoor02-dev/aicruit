@@ -8,4 +8,3 @@ logs/
 .dockerignore
 .pytest_cache
 .venv
-ARCHITECTURE.md
