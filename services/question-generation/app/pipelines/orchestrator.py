@@ -1,23 +1,15 @@
 """Compatibility facade for the LangGraph-based question flow."""
 
-from typing import Dict, List, Optional, Tuple
+from __future__ import annotations
 
-from app.graph.builder import build_question_graph
-from app.services.answer_evaluator import AnswerEvaluator
-from app.services.question_generator import QuestionGenerator
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class InterviewOrchestrator:
     """Invokes the compiled question-generation graph."""
 
-    def __init__(
-        self,
-        evaluator: AnswerEvaluator,
-        question_generator: QuestionGenerator,
-    ):
-        self.evaluator = evaluator
-        self.generator = question_generator
-        self.graph = build_question_graph(evaluator, question_generator)
+    def __init__(self, graph):
+        self.graph = graph
 
     async def generate_next_question(
         self,
@@ -25,6 +17,8 @@ class InterviewOrchestrator:
         previous_qa_list: Optional[List[Dict]] = None,
         difficulty: str = "medium",
         category: Optional[str] = None,
+        pool: Optional[List[Dict[str, Any]]] = None,
+        used_pool_questions: Optional[List[str]] = None,
     ) -> Tuple[str, Dict]:
         result = await self.graph.ainvoke(
             {
@@ -32,6 +26,8 @@ class InterviewOrchestrator:
                 "previous_qa_list": previous_qa_list,
                 "difficulty": difficulty,
                 "category": category,
+                "pool": pool or [],
+                "used_pool_questions": used_pool_questions or [],
             }
         )
         return result["question"], result["metadata"]

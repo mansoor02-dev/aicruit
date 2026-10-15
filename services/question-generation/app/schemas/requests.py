@@ -8,6 +8,13 @@ from pydantic import BaseModel, Field
 class QA(BaseModel):
     Q: str
     A: str
+    # Optional per-turn context. The gateway currently sends only Q/A; when
+    # present these flow through to evaluation, topic avoidance and the
+    # follow-up budget. All default to None/False for backward compatibility.
+    category: str | None = None
+    is_followup: bool = False
+    reference_answer: str | None = None
+    question_id: str | int | None = None
 
 
 class PoolQuestion(BaseModel):

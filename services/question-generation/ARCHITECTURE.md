@@ -2,666 +2,603 @@
 
 ## Purpose and scope
 
-The Question Generation service turns interview context into one next-question response. It is called by the gateway, which owns the interview lifecycle, database persistence, and the decision about which category of interview question comes next.
+Think of this service as a "next question machine". The gateway (the boss that
+runs the whole interview) asks it: "given this resume and what the candidate
+said so far, what should I ask next?" The service answers with exactly one
+question plus some metadata (category, difficulty, scores).
 
-This document describes the current implementation—not a proposed replacement. It explains the architecture, question and email flows, data handling, design choices, trade-offs, limitations, and likely interview questions with defensible answers.
+Simple rules to remember:
+
+- One request in, one question out. The service does NOT run the full
+  interview loop — the gateway calls it again for every turn.
+- It remembers NOTHING between requests. All history comes inside each
+  request. The gateway's database is the real memory.
+
+This document explains how it works, the design choices, the limits, and how
+to talk about it in an interview.
 
 ## 1. Architecture at a glance
 
-```mermaid
-flowchart LR
-    GW["API Gateway<br/>owns interview history"]
-    subgraph QG["Question Generation Service"]
-        API["FastAPI routes"]
-        ORCH["Graph orchestrator"]
-        GRAPH["LangGraph<br/>typed turn state"]
-        EVAL["Answer evaluator"]
-        GEN["Question generator"]
-        POOL["Recruiter pool selector"]
-        BANK[("CSV question bank")]
-        LLM["Async Gemini / OpenRouter"]
-        EMB["Gemini embeddings"]
-    end
-    GW --> API
-    API --> POOL
-    POOL -->|"no usable pool item"| ORCH
-    ORCH --> GRAPH
-    GRAPH --> EVAL
-    GRAPH --> GEN
-    EVAL --> LLM
-    EVAL --> EMB
-    GEN --> LLM
-    GEN --> BANK
-    POOL -->|"selected question"| API
-    GRAPH -->|"question + metadata"| API
-    API --> GW
+```text
+                        +-------------------------------+
+                        |        API GATEWAY            |
+                        |  (owns interview + history)   |
+                        +---------------+---------------+
+                                        |  POST /next-question
+                                        v
+                        +---------------+---------------+
+                        |   QUESTION GENERATION SERVICE |
+                        |                               |
+                        |  FastAPI routes               |
+                        |       |                       |
+                        |  Orchestrator (thin wrapper)  |
+                        |       |                       |
+                        |  LangGraph (the traffic cop:  |
+                        |   picks which step runs)      |
+                        |    |        |         |        |
+                        |  Pool    Evaluate   Intro /   |
+                        |  picker   answer    Opener    |
+                        |    +        +---------+       |
+                        |    |     Follow-up   New      |
+                        |    |     (retry x1)  topic    |
+                        |    |        |         |        |
+                        |    v        v         v        |
+                        |  { question + metadata }      |
+                        +---+-----------------+---------+
+                            |                 |
+              +-------------+      +----------+----------+
+              | CSV question       | Gemini (primary)    |
+              | bank (local file)  | OpenRouter (backup) |
+              +--------------------+----------+----------+
+                                              |
+                                   Embeddings (only for
+                                   backup scoring)
 ```
 
-The same `app.main:app` ASGI entry point is used by the Docker image and the
-Procfile/Nixpacks startup configuration. The service can also run its separate
-interactive interview CLI through `app/cli.py`.
+The same `app.main:app` starts in Docker, Procfile, and Nixpacks. There is
+also a terminal practice tool in `app/cli.py` (uses the same building
+blocks, but you type answers yourself).
 
-### Main runtime components
+### Main parts (each does one job)
 
-| Component | Responsibility | Why it is separate |
-|---|---|---|
-| FastAPI application (`app/main.py`) | Loads the question bank once at startup, creates shared clients/services, stores them on `app.state`, and includes the API router. | Keeps process composition and lifecycle out of request handlers. |
-| API router (`app/api/routes.py`) | Implements `/next-question`, `/draft-email`, and `/health`; adapts HTTP request models to service calls. | HTTP behavior can be tested without invoking real providers. |
-| Request schemas (`app/schemas/requests.py`) | Validates question, history, recruiter pool, and email request shapes. | Makes the external contract explicit and provides safe per-request defaults. |
-| LLM schemas (`app/schemas/llm.py`) | Defines Pydantic outputs for a generated question, answer evaluation, and email draft. | A provider response is not trusted until it validates against the expected shape. |
-| Question/evaluation services | Own selection, prompts, deterministic checks, fallback behavior, and scoring. | Keeps domain decisions independent of FastAPI and graph wiring. |
-| LLM client (`app/services/llm_client.py`) | Makes asynchronous calls to Gemini and OpenRouter and validates structured output. | Centralizes provider configuration, timeout handling, fallback, and JSON validation. |
-| LangGraph (`app/graph/`) | Selects which generation/evaluation operation runs for the current request. | Makes the turn-level flow and its branch conditions explicit. |
-| Orchestrator (`app/pipelines/orchestrator.py`) | Converts service inputs into graph state, invokes the graph once, and returns the question/metadata pair. | Preserves a small facade between API code and graph implementation. |
-| Gateway | Loads interview and resume state, scopes answer history to the current category, calls this service, and persists the result. | Keeps durable interview state with the system that owns interviews. |
+| Part | Job in plain words |
+|---|---|
+| FastAPI app (`app/main.py`) | Starts everything once: settings, AI models, question bank, the graph. Stores them on `app.state` so every request can use them. |
+| API router (`app/api/routes.py`) | Three endpoints: `/next-question`, `/draft-email`, `/health`. Thin: it just converts the request and calls the graph. |
+| Request schemas (`app/schemas/requests.py`) | Checks the shape of incoming data (resume, history, pool, email fields). |
+| Answer schemas (`app/schemas/llm.py`) | Checks the shape of AI answers (question, score, email). Never trust raw AI text until it passes these. |
+| Settings (`app/config.py`) | Reads environment variables in ONE place. Nothing else touches `os.getenv`. |
+| Chat models (`app/llm/models.py`) | Builds the AI models: Gemini first, OpenRouter as backup. One try each, 60-second limit. |
+| Chains (`app/llm/chains.py`) | The recipe `prompt -> model -> parser`, plus automatic fallback to the backup model, plus the scoring branch logic. |
+| Prompts (`app/prompts/templates.py`) | All question/scoring/email prompt texts live here. |
+| Pure helpers (`app/services/dataset.py`, `evaluation.py`, `text.py`) | Math and text work with no memory between requests: picking questions, scoring, cleaning text. Easy to test. |
+| Graph (`app/graph/`) | Decides which step runs for this request (intro? opener? score the answer? follow-up?). |
+| Orchestrator (`app/pipelines/orchestrator.py`) | Tiny wrapper: puts the request into the graph, returns question + metadata. |
+| Gateway (another service) | Keeps the interview records, picks which category is next, saves each question. |
 
-## 2. End-to-end question-generation flow
+## 2. How one request flows
 
-### 2.1 Request entry and recruiter question pool
+### 2.1 The recruiter question pool (free questions, no AI needed)
 
-The gateway calls `POST /next-question` with a resume snapshot, optional
-category and difficulty, previous question/answer pairs, and—when configured—a
-recruiter-provided question pool and its used-question list.
-
-The API route first considers the recruiter pool:
-
-1. Remove questions whose exact question text is listed as already used.
-2. If a category was requested, prefer unused questions whose topic matches it
-   case-insensitively. With no requested category, any unused question is
-   eligible.
-3. Choose the first preferred question, or the first unused question if none
-   matches the requested topic.
-4. If there is no unused pool question, continue into the LangGraph flow.
-5. If history exists for a selected pool question, evaluate the last answer to
-   populate response metadata. A pool-selection response is still returned if
-   that evaluation call fails; the failure is logged.
-
-This path is deterministic and avoids generation calls for a usable pool
-question. The API does not randomize recruiter-pool order; selection follows
-the incoming list order.
-
-### 2.2 Graph entry routing
-
-```mermaid
-flowchart TD
-    REQ["Validated request"] --> POOL{"Unused recruiter question?"}
-    POOL -->|"Yes"| DIRECT["Select pool question"]
-    DIRECT --> PRIOR{"Previous answer exists?"}
-    PRIOR -->|"No"| POOL_OUT["Return question<br/>no LLM call"]
-    PRIOR -->|"Yes"| POOL_EVAL["Evaluate previous answer<br/>for metadata only"]
-    POOL_EVAL --> POOL_OUT
-    POOL -->|"No"| HISTORY{"Previous answer exists?"}
-    HISTORY -->|"No; no category"| INTRO["Deterministic introduction"]
-    HISTORY -->|"No; category supplied"| OPENER["Select category opener"]
-    HISTORY -->|"Yes"| EVAL["Evaluate latest answer"]
-    EVAL --> ROUTE{"Flow decision"}
-    ROUTE -->|"same_topic / deep_dive"| FOLLOW["Generate follow-up"]
-    ROUTE -->|"new_topic"| NEW["Select and contextualize new question"]
-    OPENER --> OUT["Return one question + metadata"]
-    INTRO --> OUT
-    FOLLOW --> OUT
-    NEW --> OUT
-    POOL_OUT --> OUT
-```
-
-When the pool path does not return a question, the orchestrator invokes the
-compiled graph once with the request context. The initial edge selects one of
-three paths:
-
-| Request state | Graph path | Result |
-|---|---|---|
-| No previous answers and no category | Introduction node | Deterministic welcome/introduction question, optionally personalized with the resume name. |
-| No previous answers and a category | Category-opener node | Dataset question for that category at easy difficulty; falls back to the full dataset if that category is absent. |
-| Previous answers exist | Evaluation node | Evaluate the most recent answer, then route to a follow-up or a new question. |
-
-The gateway currently builds history from questions in the same category. That
-is intentional: the service receives a focused context window rather than the
-candidate's entire interview transcript. With an answer in graph state,
-`deep_dive` and `same_topic` decisions route to a follow-up; `new_topic` routes
-to dataset-based new-question generation.
-
-### 2.3 Question generation and fallback
-
-For a new topic, the generator selects a seed question from
-`data/software_questions.csv`, preferring the requested category and difficulty
-and avoiding recently covered topics where history contains topic information.
-If the category is unknown, the full dataset is considered. Selection
-constraints are relaxed in stages when the eligible pool is small or empty.
-Without a resume snapshot, the seed is returned as-is or with an optional
-conversational prefix. With resume data, the service extracts a concise snapshot
-and asks the LLM to contextualize the seed question.
-
-For a follow-up, the service sends the previous question, candidate answer,
-evaluation details, requested topic, and a concise resume snapshot to the LLM.
-The structured output must contain a question. The generator strips common
-preambles and keeps the first sentence; its follow-up check requires a
-question mark, at least ten characters, no more than 30 words, and between one
-and ten overlapping words of at least four characters from the previous
-answer. If the LLM call fails or the follow-up fails these checks, a
-topic-aware template is used.
-
-The graph returns one question and metadata. It does not loop until it has
-generated an interview-length set of questions: the gateway controls the
-interview loop and calls this service again for each turn.
-
-### 2.4 Candidate email drafting
-
-`POST /draft-email` is a separate feature that uses the same canonical LLM
-client but does not enter the question graph:
-
-1. Validate the request with `DraftEmailRequest`. `scenario`, candidate name,
-   and job title are required; optional context includes company, scheduled
-   time, stage, scores, and recruiter instructions.
-2. Select guidance for `shortlisted`, `interview_scheduled`, `stage_advance`,
-   `rejection`, `offer`, or `custom`. An unknown scenario uses the custom
-   guidance.
-3. Build a prompt with the candidate's first name, role, company, provided
-   interview context, and scenario-specific instructions. Rejection requests
-   with category scores ask for a short performance summary.
-4. Ask the shared LLM client for a `DraftEmail` structured response and reject
-   an empty subject or body.
-5. Return `{"subject": "...", "body": "..."}`. Failures become an HTTP 500
-   response for the caller to handle.
-
-The email path uses only request data and does not persist a draft or update
-candidate/interview records.
-
-## 3. Data flow and state ownership
-
-### Request-to-response data path
+Sometimes a recruiter uploads their own questions. Those always win — why pay
+for AI when a human already wrote the question?
 
 ```text
-Candidate / Recruiter
-        │ answer, settings, resume, optional question pool
-        ▼
-Gateway ── reads interview state and category-scoped Q/A from its database
-        │ POST /next-question
-        ▼
-Question Generation API
-        ├── recruiter pool available ──► deterministic selection
-        │                                  └─► optional last-answer evaluation
-        └── otherwise ──► orchestrator ──► LangGraph route
-                                           ├─► introduction
-                                           ├─► category opener
-                                           └─► evaluate → follow-up/new topic
-                                                  │
-                         dataset CSV ◄────────────┤
-                         Gemini / OpenRouter ◄───┤ when generation/evaluation needs LLM
-                         Gemini embeddings ◄──────┤ heuristic evaluation with reference answer
-                                                  ▼
-                                  {question, metadata}
-        ◄─────────────────────────────────────────┘
-        │ persists question and continues interview orchestration
-        ▼
-Candidate sees the next question
+  Request arrives with a pool of recruiter questions
+                        |
+                        v
+        +---> Any question NOT used yet? --- NO ---> normal AI flow
+        |                       |
+       YES                      v
+        |            Prefer one matching the requested
+        |            category (ignore big/small letters).
+        |            If none matches, take the first
+        |            unused one anyway (on purpose).
+        v                       |
+  Return it with                |
+  source = "recruiter_pool" <----+
 ```
 
-### What data moves where
+Two details:
 
-| Data | Source | Use inside this service | Owner after the response |
-|---|---|---|---|
-| Resume JSON | Gateway loads the candidate's parsed resume. | Introduction name lookup and a compact skills/projects/experience prompt context. | Gateway/database; this service does not persist it. |
-| Previous Q/A | Gateway selects history for the current category. | Last answer evaluation and follow-up context; history can also inform topic avoidance if each item includes a `category` or `topic`. | Gateway/database. |
-| Difficulty/category | Interview settings provided by the gateway. | Dataset filtering, prompt guidance, and category opener selection. | Gateway/database. |
-| Recruiter question pool | Interview/job settings provided by the gateway. | Deterministic unused/topic-matched question selection before the graph. | Gateway/database; used items are supplied by the caller. |
-| Question bank | Service-local CSV loaded at application startup. | Seed question selection and reference-answer lookup. | Versioned service data file. |
-| LLM prompt and response | Built by the generation/evaluation/email code and sent to a configured provider. | Contextual question, follow-up, answer evaluation, or email content. | Not stored by this service. |
-| Embeddings | Gemini embedding API, invoked by the evaluator's heuristic path when there is a reference answer. | Semantic component of a heuristic answer score. | Used in memory for that scoring operation. |
-| Question and metadata | Produced by the pool path or graph. | Returned to the gateway. | Gateway persists the question and response metadata as appropriate. |
+- If the candidate already answered something, the service still scores the
+  last answer (so the metadata has scores). Scoring can never break this:
+  on any surprise error it stores a neutral score and still returns the
+  pool question.
+- With no history at all, this path makes ZERO AI calls.
 
-The service itself has no database repository or durable interview-session
-store. `QuestionGraphState` is state for one graph invocation, not a persistent
-conversation. The gateway is the source of truth for interview records,
-category-scoped history, and used recruiter-pool questions.
-Email context is also constructed in memory from the request, sent to the
-provider, and returned as a draft; this service does not store it.
+### 2.2 The graph: a traffic cop with 4 exits
 
-## 4. Evaluation and routing decisions
+```text
+                    POST /next-question
+                             |
+                             v
+                    +------------------+
+                    |   route_entry    |  (first decision)
+                    +--+---+---+---+---+
+                       |   |   |   |
+        history?       |   |   |   |  no history + pool left?
+         YES           |   |   |   |  YES
+          |            |   |   |   |
+          v            v   |   |   v
+   +-------------+     |   |   |  +------------------+
+   | EVALUATE    |     |   |   |  | PICK POOL        |
+   | the answer  |     |   |   |  | QUESTION (no AI) |
+   +------+------+     |   |   |  +---------+--------+
+          |            |   |   |            |
+          v            |   |   |            |
+   +-------------+     |   |   |   no history,  no history,
+   | route_after |     |   |   |   NO category  + category
+   | _eval       |     |   |   |      |            |
+   +--+---+---+--+     |   |   |      v            v
+      |   |   |        |   |   |  +--------+  +----------+
+      |   |   |        |   |   |  | INTRO  |  | OPENER   |
+  pool|   |   |        |   |   |  | (hello +|  | (easy Q  |
+  left|   |   |        |   |   |  | name,   |  | from the |
+      |   |   |        |   |   |  | no AI)  |  | bank)    |
+      v   v   v        v   v   v  +---+----+  +-----+----+
+     POOL FU  NEW      |   |   |      |             |
+          |   |        |   |   |      +------+------+
+          v   v        v   v   v             |
+   +----------------+  (pool/intro/opener join here too)
+   | follow-up node |
+   |  (asks the AI  |
+   |   for 1 Q)     |
+   +--------+-------+
+            |
+            v
+   +----------------+
+   | validate it:   |
+   | good? -> DONE  |
+   | bad + tried    |
+   |  < 2 times?    |
+   |  -> try AGAIN  |
+   |  (with reason) |
+   | bad + out of   |
+   | tries? -> use  |
+   | a TEMPLATE Q   |
+   +----------------+
+            |
+            v
+   { question + metadata }  --> back to gateway
+```
 
-Answer evaluation returns two related values:
+Legend: FU = follow-up, NEW = new topic. Rule of thumb: the graph only
+branches where a real decision exists (entry, after scoring, follow-up
+check). Everything else is just a chain (recipe) running inside a step.
 
-1. An evaluation result for feedback and score presentation: pass/fail,
-   normalized depth score, confidence, feedback, answer length, and
-   follow-up-needed status.
-2. A flow result: `new_topic`, `same_topic`, or `deep_dive`, with a score and
-   remarks used to decide the next graph node.
+Every AI step uses the same recipe:
 
-The evaluator avoids provider calls for several predictable cases:
+```text
+  Prompt template
+        |
+        v
+  Gemini + "answer in this exact shape"   (primary)
+        |
+        +--- if it crashes --> OpenRouter prompt + parser (backup)
+        |
+        v
+  Clean-up step (fix text, check shape)
+        |
+        v
+  Save into the request's state
+```
 
-- Empty or very short text (fewer than three characters) gets a minimal-answer
-  result.
-- Text recognized by the "I don't know" phrase matcher receives a direct
-  unfamiliarity result and moves on.
-- Answers shorter than five words receive a low score and are routed for
-  follow-up.
+The gateway sends history from ONE category only (not the whole interview).
+That is on purpose: the service gets a small, focused window, not a huge
+transcript. Scores of `deep_dive` / `same_topic` mean "ask a follow-up",
+`new_topic` means "pick a fresh question".
 
-Other answers use one structured LLM request for both scoring and flow
-decision. A score of at least `0.55` is considered a pass. If structured
-evaluation fails, the evaluator uses a heuristic:
+### 2.3 Picking a new question, and plan B for failures
 
-- With a reference answer: `0.5 × semantic similarity + 0.3 × keyword overlap
-  + 0.2 × answer-length score`.
-- Without a reference answer: answer length is the heuristic score, capped at
-  `1.0`.
+New topic (no follow-up needed):
 
-The graph uses the flow decision—not only the pass flag—to route. This lets a
-strong answer still receive a `deep_dive` follow-up when the evaluator decides
-that a deeper probe is worthwhile.
+1. Look in `data/software_questions.csv` for the requested category +
+   difficulty, skipping questions the candidate already saw (matched from
+   THIS request's history, not from server memory).
+2. If almost nothing is left, loosen the rules step by step (allow seen
+   ones, then allow any difficulty, then whole file).
+3. No resume? Return the question as-is (sometimes with a friendly prefix
+   like "I'd like to know: ").
+4. Resume present? Ask the AI to rewrite the question around the candidate's
+   skills/projects. If the AI returns garbage (empty or way too long), use
+   the original question.
 
-## 5. LLM and embedding provider behavior
+Follow-up: ask the AI for ONE deeper question using the last Q, the last A,
+the score, and the resume. Check it locally (ends with `?`, 10+ characters,
+max 30 words, shares 1–10 meaningful words with the answer). Bad? Try once
+more, telling the AI why the last try failed. Still bad, or AI is down? Use
+a ready-made template like "What trade-offs did you weigh the last time you
+used {topic}...?" — so the candidate ALWAYS gets a question.
 
-### Chat completions
+One request = one question. The gateway repeats this call for every turn.
 
-`LLMClient` is the sole chat-completion implementation used by question
-generation, answer evaluation, and email drafting.
+### 2.4 Writing candidate emails (separate feature)
 
-1. If configured, Gemini is attempted first.
-2. If Gemini fails or times out, OpenRouter is attempted when configured.
-3. Each provider is attempted at most once per completion; this is provider
-   fallback, not an unbounded retry loop.
-4. Provider calls have a default 60-second timeout.
-5. `complete_json` includes the Pydantic schema in the model instructions,
-   extracts JSON (including a simple fenced-JSON form), and validates it with
-   Pydantic. Invalid structured output raises an error to the caller.
-6. Callers choose the appropriate failure strategy: question generation uses
-   a fallback question, evaluation uses the heuristic path, while email
-   drafting returns an HTTP error.
+`POST /draft-email` does not touch the question graph. It:
 
-The client is asynchronous: Gemini uses the SDK's async API and OpenRouter
-uses `httpx.AsyncClient`. The SDK receives a schema instruction in the prompt;
-the current code does not configure Gemini's native constrained JSON response
-mode.
+1. Checks the input (scenario, name, job title required).
+2. Picks instructions for the scenario (`shortlisted`, `interview_scheduled`,
+   `stage_advance`, `rejection`, `offer`, `custom`).
+3. Fills in name, role, company, date, scores.
+4. Asks the AI for `{subject, body}` and rejects empty results.
 
-Model configuration:
+It never saves anything — just returns the draft.
 
-| Variable | Meaning |
+## 3. Data: what goes where
+
+```text
+  Candidate answers, recruiter uploads resume + settings
+        |
+        v
+  GATEWAY (database: interviews, Q/A per category, used pool questions)
+        |  POST /next-question  (resume + same-category history)
+        v
+  THIS SERVICE (no database!)
+        |
+        +-- pool left? --> return recruiter question (+ score last answer)
+        |
+        +-- else --> graph: intro / opener / score -> follow-up / new topic
+        |                |           |
+        |           CSV file    Gemini / OpenRouter (AI calls)
+        |                           |
+        |                      embeddings (only for backup scoring)
+        v
+  { question + metadata } --> gateway saves it, interview continues
+```
+
+| Data | Where it is used here | Who keeps it afterwards |
+|---|---|---|
+| Resume | Hello-name + short skills/projects text for prompts | Gateway (we store nothing) |
+| Past Q/A (same category) | Scoring the last answer, follow-up context, skipping seen questions | Gateway |
+| Difficulty / category | Filtering the question bank, prompt hints | Gateway |
+| Recruiter pool | Pick first unused (prefer matching topic) | Gateway |
+| Question bank (CSV) | Starting questions + reference answers | A file in this repo |
+| Prompts / AI replies | Making questions, scores, emails | Nobody (used once, thrown away) |
+| Embeddings | Backup scoring when AI is down | Used once in memory |
+| Final question + metadata | The answer we return | Gateway saves it |
+
+`QuestionGraphState` lives for ONE graph run only. It is scratch paper, not
+memory.
+
+## 4. Scoring answers (and picking what to do next)
+
+Scoring gives TWO things:
+
+1. **Evaluation** (for humans to read): pass/fail, score 0–1, confidence,
+   one-line feedback.
+2. **Flow decision** (for the graph): `new_topic` (move on), `same_topic`
+   (answer was weak, probe again), `deep_dive` (answer was strong, go
+   deeper).
+
+Cheap checks first — NO AI call for obvious cases:
+
+```text
+  Answer arrives
+       |
+       +-- shorter than 3 chars? -----> score 0.1, same_topic
+       |
+       +-- "I don't know" pattern? ----> score 0.0, new_topic (just move on)
+       |
+       +-- fewer than 5 words? -------> score 0.2, same_topic
+       |
+       +-- else --> ONE AI call: score + feedback + decision together
+                         |
+                         +-- AI down? --> backup math (below)
+```
+
+Backup math: with a reference answer,
+`0.5 x meaning-similarity + 0.3 x shared-keywords + 0.2 x answer-length`;
+without one, just answer-length capped at 1.0. Score >= 0.55 = pass.
+Note: the graph follows the DECISION, not just pass/fail — a great answer
+can still earn a `deep_dive`.
+
+## 5. AI providers (the phone book)
+
+### How a call works
+
+```text
+  prompt template  -->  GEMINI (primary)  --crash-->  OPENROUTER (backup)
+        | даёт structured shape        | plain text + parser
+        v                              v
+              clean / validate --> return
+```
+
+- Gemini first (if `GEMINI_API_KEY` exists), OpenRouter second. Each gets
+  exactly ONE try (`max_retries=0`, 60s limit). That is fallback, not
+  endless retrying.
+- Gemini is asked for the answer in an exact shape (`with_structured_output`).
+  Cheap OpenRouter models often can't do that trick, so the backup uses
+  plain text + `PydanticOutputParser` (which also handles ```json fences).
+- Bad shape = error, handled per feature: question → template, scoring →
+  backup math, email → HTTP 500.
+- For Gemini 2.5, "thinking" is capped so it can't eat the tiny 150-token
+  budget and return an empty question.
+- Every chain is tagged for tracing. Tracing turns on via env vars only —
+  resumes and answers NEVER go into tags/metadata.
+
+Settings (all in `.env.example`):
+
+| Variable | Plain meaning |
 |---|---|
-| `GEMINI_API_KEY` | Enables Gemini chat and is required for Gemini embeddings. |
-| `GEMINI_CHAT_MODEL` | Gemini chat model; defaults to `gemini-2.5-flash`. |
-| `OPENROUTER_API_KEY` | Enables OpenRouter as fallback, or as the only chat provider. |
-| `LLM_FALLBACK_MODEL` | OpenRouter fallback model when Gemini is configured; defaults to `meta-llama/llama-3.1-8b-instruct:free`. |
-| `LLM_PRIMARY_MODEL` | OpenRouter model used when Gemini is not configured. |
-| `APP_URL` | Optional OpenRouter referer metadata. |
-| `EMBEDDING_MODEL` | Gemini embedding model; defaults to `gemini-embedding-001`. |
-| `EMBEDDING_DIMS` | Embedding output dimension; defaults to `768`. |
+| `GEMINI_API_KEY` | Turns on Gemini (chat + embeddings). |
+| `GEMINI_CHAT_MODEL` | Which Gemini model (default `gemini-2.5-flash`). |
+| `OPENROUTER_API_KEY` | Turns on the backup. Alone, it can run the whole service. |
+| `LLM_FALLBACK_MODEL` | Backup model when Gemini exists (default `meta-llama/llama-3.1-8b-instruct:free`). |
+| `LLM_PRIMARY_MODEL` | Model when ONLY OpenRouter exists. |
+| `APP_URL` | Sent as referer header to OpenRouter. |
+| `LLM_TIMEOUT_SECONDS` | One-try time limit (default `60`). |
+| `EMBEDDING_MODEL` / `EMBEDDING_DIMS` | Embedding model + size (defaults `gemini-embedding-001` / `768`). |
+| `MAX_FOLLOWUPS_PER_TOPIC` | Max follow-ups in a row (default `2`), only when history marks follow-ups. |
 
-The fallback model name is only used if a key for the relevant provider is
-available. Secrets belong in environment/secret management, never in this
-document or source control.
+No key at all = crash at startup with a clear error. Secrets stay in env
+vars, never in code/docs.
 
-### Embeddings
+### Embeddings (the backup scorer's helper)
 
-`GeminiEmbedder.encode` is a synchronous adapter for the existing scoring
-interface. It batches text inputs, requests normalized Gemini embeddings, and
-retries an embedding batch up to three times with short backoff delays. When
-semantic similarity is needed, the evaluator calls that synchronous work via
-`asyncio.to_thread` so network I/O and retry sleeps do not directly block the
-FastAPI event loop.
+One client, created LAZILY (only when first needed). No key = no client, and
+the service still starts (important for OpenRouter-only setups). Scoring
+uses async calls, so the server never freezes waiting. If embeddings exist
+but a call fails, similarity counts as neutral 0.5. If no client exists at
+all, the meaning-term is dropped and the other weights are scaled up.
 
-## 6. Design choices and rationale
+## 6. Why it is built this way
 
-| Choice | Rationale and defensible trade-off |
+| Choice | Why (one line each) |
 |---|---|
-| Separate API, schemas, services, graph, and CLI pipelines | Each layer has one clear reason to change. HTTP contracts do not need to live beside prompt logic, and CLI conversation management is not confused with the API's stateless request handling. |
-| Composition in `app/main.py` | A single startup path constructs shared clients and services, loads the dataset once per process, and wires the router. It is easy to test and keeps provider setup out of every request. |
-| Store shared runtime objects on `app.state` | Routes get dependencies from the active FastAPI application instead of module-level mutable globals. This is compatible with multiple app instances in tests and makes process lifecycle ownership explicit. |
-| Pydantic `Field(default_factory=list)` for answer history | Each request gets its own empty list rather than sharing a mutable model default between request instances. |
-| LangGraph for one turn's branching | The service has explicit branch points—introduction, category opener, answer evaluation, follow-up, and new topic. A graph makes this routing inspectable and testable. It is not used as a substitute for the gateway's durable interview state. |
-| No graph checkpoints or vector database | Current decisions need only request-supplied context and a local question bank. Checkpoint persistence or retrieval infrastructure would add operational and cost complexity without a demonstrated requirement. |
-| One canonical async chat client | Consolidates provider selection, timeout behavior, fallback, and structured response validation; avoids blocking chat calls and inconsistent behavior across features. |
-| Pydantic output models | Validate the shape and basic constraints of model output before the rest of the service consumes it. Schema validation does not prove the generated content is factually correct. |
-| Deterministic pool selection before LLM flow | Recruiter-authored questions are authoritative and do not need generative rewriting. This reduces latency/cost and preserves recruiter wording. |
-| Seed question bank plus optional personalization | The dataset provides a bounded topic/reference base; resume-aware rewriting adds relevance while a known seed and fallback preserve availability. |
-| Deterministic short-answer paths | Very short and explicit unfamiliarity answers can be handled cheaply without spending a model call on an obvious case. |
-| Combined score and flow LLM output | One model round trip produces feedback and a routing recommendation. This reduces latency/cost compared with asking separately, at the cost of making the output schema/prompt more important. |
-| Heuristic evaluation fallback | Provider failure does not necessarily prevent the interview from progressing. The score is approximate and should not be treated as a calibrated hiring decision. |
-| Gateway owns persistence | Interview records and cross-turn state remain with the service already responsible for interview data. This service stays replaceable and horizontally scalable without sticky session state. |
-| Two Gunicorn workers in the container | Provides multiple worker processes for request handling. Each process has its own application lifespan, clients, dataset, and in-memory question-selection set; this is not shared state. |
+| Folders by job (`api`, `schemas`, `services`, `graph`, ...) | Change HTTP code without touching prompts, and vice versa. |
+| All startup in `main.py` | One place builds everything; requests just use it. |
+| Shared objects on `app.state` | No global variables leaking between tests or requests. |
+| `Field(default_factory=list)` for history | Every request gets its own fresh list. |
+| LangGraph for one turn | Branching (intro/opener/score/follow-up) is written down and testable; NOT used as interview memory. |
+| No checkpoint DB, no vector DB | Nothing to remember + tiny local CSV = no extra servers needed. |
+| One model-building module | Timeout, fallback rule, and model names in one spot. |
+| Pydantic output shapes | AI text is checked BEFORE we use it (shape only, not truth). |
+| Pool questions first | Recruiter's own words win; saves time and money. |
+| CSV seeds + AI rewrite | Bounded topics from the file, personal touch from AI, safe fallback to the original. |
+| Free checks before AI calls | "idk" and tiny answers cost $0 to handle. |
+| One AI call for score + decision | Half the waiting, half the cost of two calls. |
+| Backup scoring math | Interview continues even if both AI providers are down (rough score, not a hiring verdict). |
+| Gateway keeps all records | This service stays replaceable; run 1 or 100 copies, no shared memory. |
+| 2 Gunicorn workers | Two processes handle requests; each loads its own copy of everything. |
 
-## 7. Production caveats and practical improvements
+## 7. Honest limits (read before production)
 
-These are observations about the current implementation, not claims that the
-system already provides the safeguards:
+1. **No cross-interview memory — by design.** Skipped-question IDs come from
+   THIS request's history only. Nobody else's interview can affect yours.
+2. **Topic-skipping needs gateway help.** History items CAN carry `category` /
+   `is_followup` / `reference_answer`, but the gateway today sends only `Q`
+   and `A`, so those extras stay unused until the gateway sends them.
+3. **Backup scores are rough.** Fine for keeping the interview alive, NOT for
+   real hiring decisions without calibration + human review.
+4. **Failed embedding = neutral 0.5.** "No client at all" is handled better
+   (weights rescaled), but a mid-call failure still looks like average
+   similarity. Worth making visible later.
+5. **Pool scoring is best-effort.** If scoring blows up, the question is still
+   returned; treat missing scores as "unknown", not "good".
+6. **Shape-check is not truth-check.** A perfect-shaped question can still be
+   boring or repetitive. Quality checks are a future add-on.
+7. **Backup = slower worst case.** Gemini timeout + OpenRouter try can stack.
+   Keep the gateway's own timeout in mind.
+8. **Embeddings have no guard rails yet.** A semaphore/circuit-breaker could
+   help if the provider keeps failing.
+9. **`/health` is shallow.** It says "I'm alive", not "AI works". Monitor
+   providers separately.
+10. **Resumes go to outside providers.** Even trimmed. Needs approved
+    data/retention settings + access control.
+11. **No auth in these routes.** The gateway is the public face; lock this
+    service to private network only.
+12. **Each worker loads everything.** More workers = more memory + startup
+    cost; scale with provider limits in mind.
 
-1. **Question reuse state is process-local.** `QuestionGenerator` keeps
-   `used_question_ids` on the shared service instance. It is not scoped to an
-   interview, is not shared across Gunicorn workers, and resets on restart.
-   This can influence dataset selection across unrelated candidates. Prefer
-   making selection stateless per request using the gateway's already-used IDs
-   or adding an explicit interview/session-scoped selection input.
-2. **Question-history topic avoidance depends on optional fields.** The
-   generator's topic extraction looks for `category` or `topic` in each history
-   item. The gateway currently sends category-scoped records with `Q` and `A`
-   only, so that particular recent-topic avoidance signal is absent on that
-   call path. Category filtering still applies independently.
-3. **Heuristic scores are approximate.** The semantic/keyword/length formula
-   is a graceful fallback, not a validated measure of candidate quality. A
-   production hiring decision should not depend on it without calibration,
-   bias review, and human oversight.
-4. **Embedding failures can look like neutral semantic evidence.** The
-   similarity helper catches embedding errors and returns `0.5`; the heuristic
-   then continues. A future version should report the degraded signal and
-   distinguish "embedding unavailable" from actual measured similarity.
-5. **Pool evaluation is best-effort.** The recruiter-pool route logs and
-   suppresses an evaluation exception so question delivery succeeds. Consumers
-   must treat the empty evaluation as unavailable, not as a successful score.
-6. **Chat output validation is structural, not semantic.** Invalid JSON raises
-   and is handled by feature-level fallbacks, but a valid Pydantic object may
-   still contain a poor, repetitive, or unsupported question. Add content
-   quality checks and observability if those properties become requirements.
-7. **Provider fallback increases worst-case latency.** A timeout against
-   Gemini can be followed by a separate OpenRouter attempt. Measure end-to-end
-   request latency and choose a total request budget appropriate to the
-   gateway's timeout.
-8. **Embedding calls use a synchronous SDK in worker threads.** This protects
-   the async event loop, but repeated failures can occupy worker threads during
-   backoff. An async embedding client or bounded semaphore/circuit breaker is a
-   possible later improvement.
-9. **Health is a process check, not a dependency check.** `/health` returns
-   service status and does not test LLM credentials, provider reachability, or
-   embedding availability. Keep liveness cheap; add a separately secured and
-   appropriately cached readiness/dependency check if operations need it.
-10. **Resume content crosses a provider boundary.** The service extracts a
-    compact subset for personalization, but it still contains candidate
-    information. Production operation needs approved provider/data-retention
-    settings, access controls, and a documented data-minimization policy.
-11. **Service-level access control is not visible in these routes.** The
-    frontend normally reaches the gateway, but deployment/network policy must
-    ensure the microservice is not exposed as an unauthenticated public API.
-12. **Per-worker startup matters.** With multiple Gunicorn workers, each process
-    initializes its own clients and loads the CSV. Scale worker count with
-    provider limits, memory, and startup cost in mind.
+## 8. Interview Q&A (short + technical)
 
-## 8. Interview questions and defensible answers
+### Structure
 
-### Architecture and boundaries
+**Q1. Why separate `api`, `schemas`, `services`, `graph`, `prompts`?**
+A. Separation of concerns: transport, contracts, pure logic, routing,
+prompts. I can change prompts without touching HTTP code, and test logic
+with stubbed chains.
 
-**Q1. Why did you split this service into `api`, `schemas`, `services`,
-`graph`, and `pipelines`?**
+**Q2. Why build everything in `main.py` lifespan, not per request?**
+A. Models, chains, dataset, and the compiled graph are expensive and
+stateless — build once, share via `app.state`, keep requests cheap.
 
-**A.** They represent different responsibilities: HTTP transport, input/output
-contracts, domain/provider operations, turn routing, and the orchestration
-facade/CLI flow. That lets me test the decision logic with mocked providers and
-change HTTP wiring without rewriting prompts. I kept the structure modest:
-there is no separate repository or domain layer because this service does not
-own durable data.
+**Q3. Why `app.state` instead of globals?**
+A. Globals leak between app instances in tests and hide ownership. `app.state`
+is scoped to the app's lifespan.
 
-**Q2. Why is `main.py` a composition root instead of putting initialization
-inside the API module?**
+**Q4. Why LangGraph for a single turn?**
+A. The turn has real branches (intro / opener / evaluate -> follow-up or new
+topic, plus a retry loop). A graph makes states and transitions explicit and
+testable. No checkpointer: the gateway owns durable state.
 
-**A.** Startup is where shared clients, the dataset, evaluator, generator, and
-orchestrator are assembled. Keeping that wiring in one place makes lifecycle
-and ownership explicit and lets the router depend on the app's initialized
-state. It also avoids constructing an LLM client for every request.
+**Q5. Why doesn't this service run the whole interview?**
+A. Single responsibility + single source of truth. The gateway owns records,
+scheduling, and category order. Two loops would mean two truths.
 
-**Q3. Why use `app.state` instead of module-level globals or constructing
-services inside every route?**
+**Q6. Why no vector DB or checkpointing?**
+A. No retrieval need: context is small (same-category history) and the bank
+is a 200-row CSV. Add infra only after a measured need.
 
-**A.** The services are process-scoped dependencies, so FastAPI's application
-state is a natural place to store them. It avoids module-global state leaking
-between multiple application instances in tests and avoids repeated setup on
-each request. I would still validate the service is initialized and consider
-formal dependency providers if the dependency graph grows.
+### Flow
 
-**Q4. Why use LangGraph for this flow?**
+**Q7. What happens with a recruiter pool?**
+A. Deterministic pick inside the graph: first unused question matching the
+category, else first unused. Zero LLM calls without history; with history the
+last answer is scored first (never raises).
 
-**A.** The flow has meaningful branching: introduction, category opener, then
-evaluation followed by either a follow-up or a new topic. LangGraph makes
-those states and transitions explicit and gives us a natural place to add
-observable nodes later. The graph is intentionally one-turn and in-memory;
-we do not claim that it persists conversations.
+**Q8. How is intro vs opener vs evaluate chosen?**
+A. `route_entry`: history -> evaluate; unused pool item -> pool; no category
+-> intro; else easy category opener.
 
-**Q5. Why not put the whole interview loop inside this service?**
+**Q9. When is a follow-up asked?**
+A. Decision `same_topic`/`deep_dive` -> follow-up (capped by
+`MAX_FOLLOWUPS_PER_TOPIC` when history flags follow-ups); else new topic.
 
-**A.** The gateway owns interview records, scheduling/settings, category
-scoping, question persistence, and downstream interview orchestration. This
-service returns one question per call. Duplicating the loop here would create
-two sources of truth and risk breaking gateway behavior.
+**Q10. How is a new question picked?**
+A. Filter CSV by category + difficulty minus per-request `exclude_ids`,
+relaxing constraints stepwise; prefer topics outside the last 3 covered;
+personalize via LLM only when a resume snippet exists.
 
-**Q6. Why no checkpoint database, vector database, or multi-agent setup?**
+**Q11. Follow-up fails checks or the LLM is down?**
+A. Retry once with the rejection reason, then a topic template. Personalize
+failure falls back to the raw seed. Delivery never depends on the LLM.
 
-**A.** The current graph uses request context plus a small local CSV question
-bank. There is no demonstrated need for retrieval, durable graph resumption,
-or independent agents. I would add those only after a measured requirement,
-such as transcript lengths exceeding safe context limits or a need to resume
-the graph independently of gateway state.
+### Providers & reliability
 
-### Question flow and decisions
+**Q12. How do you avoid blocking the event loop?**
+A. Fully async clients (`ChatGoogleGenerativeAI`, `ChatOpenAI`,
+`aembed_documents`). No threads, no sync SDK in the request path.
 
-**Q7. What happens when a recruiter supplies a question pool?**
+**Q13. Retry or fallback?**
+A. Fallback, bounded: `max_retries=0` per provider, 60s timeout each, Gemini
+then OpenRouter via `.with_fallbacks` on finished chains.
 
-**A.** The service tries unused pool questions first, preferring the requested
-topic. It returns the first eligible item, preserving recruiter-authored text
-and avoiding generation cost. If no unused item remains, it falls through to
-the normal graph. If previous answers exist, it also tries to evaluate the
-last answer for metadata, but pool delivery is not blocked by evaluation
-failure.
+**Q14. What does structured output guarantee?**
+A. Shape and field constraints only (via `with_structured_output` /
+`PydanticOutputParser`) — not correctness, fairness, or factuality.
 
-**Q8. How does the graph choose introduction versus category opener versus
-answer evaluation?**
+**Q15. Why an OpenRouter fallback?**
+A. Second provider path with zero interface change; also enables
+OpenRouter-only deploys via `LLM_PRIMARY_MODEL`. Trade-off: worst-case
+latency doubles.
 
-**A.** It checks the initial state. No history and no category means an
-introduction; no history with a category means an easy category opener; any
-history means evaluate the last answer. Tests cover introduction and follow-up
-routing. The category-opener branch is simple enough to add a focused test if
-we need more explicit coverage.
+**Q16. LLM down during scoring?**
+A. Short-circuits first (empty/idk/brief), else heuristic:
+`0.5*similarity + 0.3*keywords + 0.2*length` (or length-only). Rough, not a
+hiring signal.
 
-**Q9. When does it ask a follow-up?**
+### State & ops
 
-**A.** After evaluation, `same_topic` and `deep_dive` route to the follow-up
-node. `new_topic` routes to a new dataset-based question. Separately, empty,
-very short, and recognized "I don't know" responses have deterministic
-evaluation behavior, so those do not all require an LLM request.
+**Q17. Is graph state the interview memory?**
+A. No — one `ainvoke`, then gone. Gateway passes history in and persists the
+result out.
 
-**Q10. How is a new question chosen?**
+**Q18. Can one candidate's interview affect another's?**
+A. No. `DatasetRepository` is immutable; `exclude_ids` derive from the
+current request only. Workers share nothing.
 
-**A.** The service filters the dataset by category and difficulty when
-possible, avoids recently used IDs while the instance has that state, and
-relaxes constraints when too few questions remain. It then prefers topics
-outside the last three covered when that information is present. The gateway's
-current history format does not include topic fields, so that avoidance part
-does not currently receive those topics on that path.
+**Q19. Effect of multiple Gunicorn workers?**
+A. Each is an independent process with its own lifespan (models, CSV,
+graph). More throughput, no shared state.
 
-**Q11. What is the fallback if a follow-up LLM request fails or returns a
-question that fails local checks?**
+**Q20. What does `/health` prove?**
+A. Liveness only. Providers/keys are NOT checked — monitor those separately.
 
-**A.** The generator uses a topic-aware template. For contextualizing a dataset
-question, it falls back to the original seed (possibly with a conversational
-prefix). The local follow-up check is a simple overlap/length heuristic, not a
-semantic quality or safety evaluation. The API therefore has a non-LLM path
-for delivering a question in those cases.
+**Q21. First production improvement?**
+A. Make heuristic degradation observable (metrics/logs), then latency
+budgets, timeout contract tests, auth/network policy, data-retention review.
 
-### Providers, async, and reliability
+**Q22. Testing without paid API keys?**
+A. `RunnableLambda` stubs for `Chains`, fake models for `make_chat_models`,
+in-memory `DatasetRepository`. 47 tests, zero network.
 
-**Q12. How do you avoid blocking FastAPI's event loop?**
+**Q23. Why is email outside the graph?**
+A. Different workflow, different schema — shares only the model builders.
+Putting it in the graph would couple unrelated flows.
 
-**A.** Chat uses the Gemini async SDK and `httpx.AsyncClient` for OpenRouter.
-The embedding adapter is synchronous, so semantic similarity calls it via
-`asyncio.to_thread`. That isolates blocking embedding work from the event loop.
-The synchronous CLI is a separate execution path.
+**Q24. Is a valid email safe to send?**
+A. No. Schema = non-empty subject/body; prompt = "don't invent facts".
+Still needs human review / approval step before sending.
 
-**Q13. Is the provider logic an automatic retry system?**
+## 9. Key points that win interviews
 
-**A.** No. Each configured chat provider is attempted at most once: Gemini
-first, then OpenRouter if available. This is bounded provider fallback. It
-avoids infinite retry loops, but it can add up to two provider timeout windows
-to a worst-case request, so the gateway timeout must be considered.
+- Say the one-liner first: "stateless one-question-per-call service behind
+  the gateway; LangGraph routes one turn; gateway owns memory."
+- Always name the contract: `POST /next-question` -> `{question, metadata}`;
+  graph input is request fields only, output is question + metadata only.
+- Mention the money-saving paths: pool pick, short-circuit scoring, and
+  seed-fallback all avoid AI calls.
+- Mention the failure paths unprompted: fallback provider, retry-once then
+  template, heuristic scoring, neutral evaluation. Engineers trust people
+  who think about failure.
+- Know the numbers: 60s timeout, one try each, pass >= 0.55, follow-up budget
+  2, word limits 10/15/20 by difficulty.
+- Be honest about limits: heuristic scores aren't hiring signals, health is
+  shallow, resumes cross provider boundaries.
+- If asked "what would you change": observability of degraded paths first,
+  then latency budgets, then gateway sending the optional `QA` fields.
 
-**Q14. What does “structured output” guarantee here?**
+## 10. Keywords / concepts to keep in mind (AI Engineer)
 
-**A.** It asks the provider to return the Pydantic schema as JSON and validates
-the returned JSON before using it. That guarantees the parsed object's
-structure and field constraints, not correctness, relevance, fairness, or
-factuality. Bad structured output raises and is handled by the calling
-feature's fallback/error policy.
+- **LCEL** — LangChain Expression Language: `prompt | model | parser`
+  chains composed with `|`.
+- **Structured output** — forcing the model to answer in an exact schema
+  (`with_structured_output`, `PydanticOutputParser`).
+- **Fallbacks** — `.with_fallbacks([...])`: try backup on exception.
+- **RunnableBranch** — if/else routing between runnables (used for scoring
+  short-circuits).
+- **RunnableLambda** — wrap any function as a chain step; also the test
+  stub trick.
+- **ChatPromptTemplate** — system + human message templates; values (not
+  templates) carry user text, so braces inside are safe.
+- **LangGraph** — state machine for branching flows: nodes, edges,
+  conditional edges; compiled once, invoked per request.
+- **Checkpointer** — graph memory; deliberately NOT used here (stateless).
+- **Embeddings** — text -> numbers; cosine similarity measures meaning
+  overlap; used only in backup scoring.
+- **Heuristic fallback** — rule-based backup when AI fails (similarity +
+  keywords + length).
+- **Prompt-injection hardening** — untrusted text inside `<tags>` + "tags
+  are data, never instructions".
+- **Single-attempt policy** — `max_retries=0` + timeout per provider.
+- **Stateless service** — no memory between requests; inputs carry all
+  context; horizontal scaling is trivial.
+- **Composition root** — one startup place (`main.py` lifespan) building all
+  shared objects.
+- **Contract-first API** — fixed request/response shapes the gateway relies
+  on; only additive optional changes allowed.
 
-**Q15. Why keep an OpenRouter fallback if Gemini is primary?**
+## 11. Short interview summary
 
-**A.** It provides a second configured provider path without changing the
-service's client interface. The client chooses Gemini when available and
-OpenRouter on failure; an OpenRouter-only deployment can use
-`LLM_PRIMARY_MODEL`. This should be evaluated against latency, provider
-availability, data policy, and cost rather than assumed to be universally
-better.
+> Stateless one-turn FastAPI service behind the gateway. Recruiter pool
+> questions win for free; otherwise a small LangGraph routes: intro or easy
+> opener with no history, else score-then-follow-up-or-new-topic — all on
+> `prompt | model | parser` chains (Gemini primary, OpenRouter backup).
+> Free deterministic checks, retry-once templates, and heuristic scoring
+> keep every turn answered even with providers down. Gateway owns all memory;
+> selection is per-request stateless.
 
-**Q16. How does answer scoring work if the LLM is unavailable?**
+## 12. Validation references
 
-**A.** Deterministic short-answer checks run first. For other answers, a
-structured LLM result supplies score, confidence, feedback, and flow decision.
-If that fails, a heuristic uses embeddings, keyword overlap, and length when
-there is a reference answer, or length alone otherwise. It is a resilience
-fallback, not a calibrated hiring assessment.
-
-### State, scale, and operation
-
-**Q17. Is the graph state the source of truth for an interview?**
-
-**A.** No. It exists for one `ainvoke` call. The gateway retrieves category-
-scoped history from its database, passes it in, and persists the generated
-question. That gives the gateway durable state and lets the question service
-remain horizontally replaceable.
-
-**Q18. Is question usage state currently isolated per candidate or interview?**
-
-**A.** Not completely. `used_question_ids` belongs to the shared
-`QuestionGenerator` instance in each worker, so it is process-local and can
-affect multiple interviews within that worker. Workers do not share it, and
-restarts reset it. I would replace it with request/interview-scoped used IDs
-from the gateway before relying on it for fairness or strict non-repetition.
-
-**Q19. What changes when Gunicorn has multiple workers?**
-
-**A.** Each worker is a separate process and runs its own FastAPI lifespan. It
-loads its own question bank and creates its own provider/service instances and
-question-ID set. This improves process-level request handling but does not
-create shared memory or shared interview state.
-
-**Q20. What does `/health` tell an operator?**
-
-**A.** It confirms the process can answer the health route. It does not call
-Gemini/OpenRouter or verify embeddings. Provider readiness should be monitored
-separately so a dependency outage does not make liveness checks restart every
-worker.
-
-**Q21. What would you improve first for production?**
-
-**A.** First remove process-global question-selection effects by passing
-interview-scoped used IDs or making selection stateless. Then make heuristic
-degradation observable, add explicit integration/contract checks for provider
-timeouts and category opener behavior, set an end-to-end latency budget across
-gateway and both providers, and verify network-level authentication and
-provider data-retention policies.
-
-**Q22. How would you test without paid API access?**
-
-**A.** Mock `LLMClient.complete_json`, provider network calls, and the embedder.
-Test the exact output shape, provider timeout/failure path, invalid structured
-output, deterministic short-answer behavior, each graph branch, and the
-gateway-facing response contract. The current service tests are mocked and do
-not require live provider credentials.
-
-**Q23. Why does email drafting use the same client but not the question graph?**
-
-**A.** Email drafting shares provider fallback and structured output
-validation, but its scenario guidance and output schema are independent of
-interview turn routing. Reusing the client avoids duplicate provider code;
-putting email generation in the question graph would couple unrelated
-workflows.
-
-**Q24. Does a valid structured email guarantee the email is safe to send?**
-
-**A.** No. The schema guarantees a non-empty subject and body, while the prompt
-asks the model not to invent facts. It does not independently verify claims,
-policy compliance, or tone. A production send flow should review or validate
-generated content and use the product's intended approval step.
-
-## 9. Short interview summary
-
-> The Question Generation service is a stateless, one-turn FastAPI microservice
-> behind the gateway. It prefers recruiter-authored pool questions, otherwise
-> routes the request through a small LangGraph: deterministic introduction or
-> category opener when there is no answer history, and combined answer
-> evaluation followed by a follow-up or new topic when history exists. A
-> canonical asynchronous Gemini/OpenRouter client validates Pydantic-shaped
-> outputs; deterministic checks, dataset questions, templates, and a heuristic
-> evaluator provide bounded fallbacks. The gateway—not this graph—owns durable
-> interview state. The main known production concern is that dataset question
-> usage is currently tracked per worker rather than per interview.
-
-## 10. Validation references
-
-The service's mocked tests cover the LLM client, question generation, answer
-evaluation, graph routing, and API response contracts. For a local check from
-the repository root:
+Mocked tests cover models, chains, generation, evaluation, routing, and API
+contracts:
 
 ```powershell
 D:\FYP_WORK\Start_prject\aicruit\.venv\Scripts\python.exe -m pytest services\question-generation\tests -q
 ```
 
-The API's stable response shapes are:
+Stable response shapes:
 
-- `POST /next-question` → `{"question": "...", "metadata": {...}}`
-- `POST /draft-email` → `{"subject": "...", "body": "..."}`
-- `GET /health` → `{"status": "ok", "service": "interview-question-generation"}`
+- `POST /next-question` -> `{"question": "...", "metadata": {...}}`
+- `POST /draft-email` -> `{"subject": "...", "body": "..."}`
+- `GET /health` -> `{"status": "ok", "service": "interview-question-generation"}`
 
-<!-- mermaid-checked: every participant uses `participant Id as "Label"`, no \n in aliases/messages/notes, every alt/opt/loop closed by end, no `:` inside any alias -->
-```mermaid
-sequenceDiagram
-    participant Gateway as "API Gateway"
-    participant API as "Question API"
-    participant Pool as "Recruiter Pool Selector"
-    participant Orchestrator as "Graph Orchestrator"
-    participant Graph as "LangGraph"
-    participant Evaluator as "Answer Evaluator"
-    participant Generator as "Question Generator"
-    participant Dataset as "Question Bank"
-    participant LLM as "Gemini or OpenRouter"
+Request flow (ASCII):
 
-    Gateway->>API: POST next question with resume and category history
-    API->>Pool: Check for an unused recruiter question
-    alt Unused pool question exists
-        Pool-->>API: Return selected question and metadata
-        opt Previous answer exists
-            API->>Evaluator: Evaluate last answer for metadata
-            Evaluator->>LLM: Request structured evaluation
-            LLM-->>Evaluator: Evaluation or provider failure
-            Evaluator-->>API: Evaluation details or fallback result
-        end
-    else No usable pool question
-        API->>Orchestrator: Invoke one question turn
-        Orchestrator->>Graph: Pass request state
-        alt No history and no category
-            Graph->>Generator: Build introduction
-            Generator-->>Graph: Deterministic welcome question
-        else No history and category provided
-            Graph->>Generator: Generate category opener
-            Generator->>Dataset: Select easy question for category
-            Dataset-->>Generator: Seed question and reference answer
-            Generator-->>Graph: Category opener
-        else Previous answer exists
-            Graph->>Evaluator: Evaluate latest category-scoped answer
-            Evaluator->>LLM: Request score feedback and flow decision
-            LLM-->>Evaluator: Structured result or provider failure
-            Evaluator-->>Graph: Evaluation and flow decision
-            alt Same topic or deep dive
-                Graph->>Generator: Generate follow-up
-                Generator->>LLM: Request structured follow-up question
-                LLM-->>Generator: Question or provider failure
-                Generator-->>Graph: Follow-up or template fallback
-            else New topic
-                Graph->>Generator: Generate a new topic question
-                Generator->>Dataset: Select seed by category and difficulty
-                Dataset-->>Generator: Seed question and reference answer
-                opt Resume snapshot available
-                    Generator->>LLM: Contextualize the seed question
-                    LLM-->>Generator: Contextual question or provider failure
-                end
-                Generator-->>Graph: Contextual question or seed fallback
-            end
-        end
-        Graph-->>Orchestrator: Question and metadata
-        Orchestrator-->>API: Question and metadata
-    end
-    API-->>Gateway: Return question and metadata
-    Gateway->>Gateway: Persist question and continue interview
+```text
+  GATEWAY
+    |  POST /next-question (resume + same-category history)
+    v
+  API -> ORCHESTRATOR -> GRAPH
+    |
+    +-- no history + pool left --> POOL -> pick item -> DONE
+    |
+    +-- no history, no category --> INTRO -> hello question -> DONE
+    |
+    +-- no history + category ---> OPENER -> CSV easy question -> DONE
+    |
+    +-- history ------------------> EVALUATE last answer (AI or free checks)
+         |
+         +-- pool left -----------------> POOL -> DONE
+         |
+         +-- same_topic / deep_dive -----> FOLLOW-UP (AI, retry once,
+         |                                 then template) -> DONE
+         |
+         +-- new_topic -------------------> CSV seed (+ AI rewrite if resume)
+                                           -> DONE
+    |
+    v
+  { question + metadata } -> GATEWAY saves it, interview goes on
 ```

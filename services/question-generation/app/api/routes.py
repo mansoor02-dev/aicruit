@@ -1,10 +1,12 @@
 """HTTP routes for the Question Generation service."""
+
 import logging
 
 from fastapi import APIRouter, HTTPException, Request
 
+from app.prompts.templates import build_scenario_guidance
 from app.schemas.llm import DraftEmail
-from app.schemas.requests import DraftEmailRequest, PoolQuestion, QuestionRequest
+from app.schemas.requests import DraftEmailRequest, QuestionRequest
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -32,9 +34,9 @@ async def get_next_question(req: QuestionRequest, request: Request):
         }
     """
     try:
-        orchestrator = request.app.state.orchestrator
+        graph = request.app.state.graph
         previous_qa_list = (
-            [{"Q": qa.Q, "A": qa.A} for qa in req.previous_qa]
+            [qa.model_dump() for qa in req.previous_qa]
             if req.previous_qa
             else None
         )
@@ -45,64 +47,21 @@ async def get_next_question(req: QuestionRequest, request: Request):
             f"pool_size={len(req.question_pool or [])}"
         )
 
-        # If a recruiter-uploaded pool exists, prefer picking from it.
-        if req.question_pool:
-            used = set(req.used_pool_questions or [])
-            target_topic = (req.category or "").strip().lower()
-
-            def _topic_match(q: PoolQuestion) -> bool:
-                if not target_topic:
-                    return True
-                t = (q.topic or "").strip().lower()
-                return t == target_topic
-
-            unused = [q for q in req.question_pool if q.question not in used]
-            preferred = [q for q in unused if _topic_match(q)]
-
-            chosen = None
-            if preferred:
-                chosen = preferred[0]
-            elif unused:
-                chosen = unused[0]
-
-            if chosen is not None:
-                metadata = {
-                    "source": "recruiter_pool",
-                    "scenario": "new_question",
-                    "question_id": None,
-                    "category": chosen.topic or req.category or "Unknown",
-                    "difficulty": req.difficulty,
-                    "reference_answer": "",
-                    "is_followup": False,
-                    "evaluation": {},
-                }
-                # Still evaluate prior answer if there is history, to populate scores
-                if previous_qa_list:
-                    last_qa = previous_qa_list[-1]
-                    try:
-                        evaluation, flow = await orchestrator.evaluator.evaluate_combined(
-                            question=last_qa["Q"],
-                            user_answer=last_qa["A"],
-                            reference_answer=None,
-                            is_followup=False,
-                        )
-                        metadata["evaluation"] = {
-                            "decision":   flow.get("decision"),
-                            "score":      flow.get("score_value"),
-                            "confidence": evaluation.get("confidence"),
-                            "remarks":    flow.get("remarks"),
-                            "feedback":   evaluation.get("feedback"),
-                        }
-                    except Exception as eval_exc:
-                        logger.warning(f"Pool path evaluator failed: {eval_exc}")
-                return {"question": chosen.question, "metadata": metadata}
-
-        question, metadata = await orchestrator.generate_next_question(
-            resume_json=req.resume_json or {},
-            previous_qa_list=previous_qa_list,
-            difficulty=req.difficulty,
-            category=req.category,
+        result = await graph.ainvoke(
+            {
+                "resume_json": req.resume_json or {},
+                "previous_qa_list": previous_qa_list,
+                "difficulty": req.difficulty,
+                "category": req.category,
+                "pool": (
+                    [pool_question.model_dump() for pool_question in req.question_pool]
+                    if req.question_pool
+                    else []
+                ),
+                "used_pool_questions": req.used_pool_questions or [],
+            }
         )
+        question, metadata = result["question"], result["metadata"]
 
         logger.info(
             f"Generated: category={metadata.get('category')}, "
@@ -115,67 +74,21 @@ async def get_next_question(req: QuestionRequest, request: Request):
         logger.error(f"Error generating question: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-SYSTEM_PROMPT_EMAIL = (
-    "You are an HR communications assistant for AIcruit. "
-    "Write professional, warm, concise candidate emails. "
-    "Plain text only — no markdown, no asterisks, no bullet symbols other than dashes. "
-    "Address the candidate by first name. Keep paragraphs short. "
-    "Do not invent facts beyond what's provided. "
-    "End with 'Best regards,' on its own line followed by '{Company} Hiring Team' "
-    "(or 'The AIcruit Hiring Team' if no company is provided)."
-)
-
-
-_SCENARIO_GUIDANCE = {
-    "shortlisted": (
-        "Tone: congratulatory and encouraging. Inform the candidate they have been "
-        "shortlisted for the {job_title} role. Briefly mention next steps (a recruiter "
-        "will be in touch) and thank them for their interest."
-    ),
-    "interview_scheduled": (
-        "Tone: warm and informative. Congratulate the candidate on advancing to the "
-        "interview stage for the {job_title} role. Mention the scheduled date and time "
-        "({scheduled_at}). Provide a one-line note that the interview link will follow "
-        "(use the literal placeholder {{interview_link}} where the link will appear). "
-        "Keep instructions brief: have your environment ready, test your mic and camera."
-    ),
-    "stage_advance": (
-        "Tone: positive and encouraging. Tell the candidate they have advanced to the "
-        "{stage_name} stage for the {job_title} role. Mention what to expect at this stage "
-        "and that the team will reach out with details soon."
-    ),
-    "rejection": (
-        "Tone: respectful, kind, and clearly final. Thank the candidate for their time "
-        "and effort. State plainly that they have not been selected for the {job_title} "
-        "role at this time, without vague hedging. Wish them well."
-    ),
-    "offer": (
-        "Tone: enthusiastic and professional. Extend the offer for the {job_title} role. "
-        "Mention that a formal offer letter with full details will follow. Encourage them "
-        "to reach out with any questions."
-    ),
-    "custom": (
-        "Follow the custom instructions exactly. {custom_instructions}"
-    ),
-}
-
 
 @router.post("/draft-email")
 async def draft_email(req: DraftEmailRequest, request: Request):
     """
-    Generate a candidate email subject + body using Gemini.
+    Generate a candidate email subject + body.
     Returns: {"subject": str, "body": str}
     """
     try:
         scenario = (req.scenario or "custom").strip().lower()
-        guidance_template = _SCENARIO_GUIDANCE.get(scenario, _SCENARIO_GUIDANCE["custom"])
-
-        # Format guidance with available fields
-        guidance = guidance_template.format(
-            job_title=req.job_title or "the role",
-            scheduled_at=req.scheduled_at or "the scheduled time",
-            stage_name=req.stage_name or "the next stage",
-            custom_instructions=req.custom_instructions or "",
+        guidance = build_scenario_guidance(
+            scenario,
+            req.job_title,
+            req.scheduled_at,
+            req.stage_name,
+            req.custom_instructions,
         )
 
         company = req.company_name or "AIcruit"
@@ -211,24 +124,19 @@ async def draft_email(req: DraftEmailRequest, request: Request):
                 "category formatted exactly as '- {category}: {score}/10'."
             )
 
-        user_prompt = (
-            f"Scenario: {scenario}\n"
-            f"Guidance: {guidance}\n\n"
-            f"Context:\n" + "\n".join(context_lines) + "\n\n"
-            f"Write the email now.{extra_rules}\n\n"
-            "Return STRICT JSON with exactly these keys and no others, "
-            "no markdown fences, no commentary:\n"
-            '{"subject": "<one-line subject>", "body": "<plain text body with \\n line breaks>"}'
+        email_chain = request.app.state.chains.email
+        result = await email_chain.ainvoke(
+            {
+                "scenario": scenario,
+                "guidance": guidance,
+                "context": "\n".join(context_lines),
+                "extra_rules": extra_rules,
+            }
         )
-
-        result = await request.app.state.llm_client.complete_json(
-            prompt=user_prompt,
-            system=SYSTEM_PROMPT_EMAIL,
-            response_model=DraftEmail,
-            max_tokens=900,
-            temperature=0.4,
-        )
-        parsed = result.model_dump()
+        if isinstance(result, DraftEmail):
+            parsed = result.model_dump()
+        else:
+            parsed = DraftEmail.model_validate(result).model_dump()
         if not parsed.get("subject") or not parsed.get("body"):
             raise ValueError("LLM returned empty subject or body")
         return parsed

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import random
 from datetime import datetime
 from pathlib import Path
 
@@ -8,12 +9,15 @@ import pandas as pd
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
 
+from app.config import Settings
+from app.graph.nodes import QuestionGraphNodes
+from app.llm.chains import build_chains
+from app.llm.embeddings import EmbeddingProvider
+from app.llm.models import make_chat_models
 from app.pipelines.conversation_manager import ConversationManager
 from app.pipelines.flow_controller import FlowController
-from app.services.answer_evaluator import AnswerEvaluator
-from app.services.embedding import get_embedder
-from app.services.llm_client import LLMClient
-from app.services.question_generator import QuestionGenerator
+from app.services.dataset import DatasetRepository
+from app.services.text import is_valid_followup
 
 
 # ---------------------------------------------------------------------------
@@ -25,7 +29,6 @@ class Config:
     CSV_PATH  = BASE_DIR / "data" / "software_questions.csv"
     LOGS_DIR  = BASE_DIR / "logs"
 
-    EMBED_MODEL     = "all-MiniLM-L6-v2"
     TOTAL_QUESTIONS = 3
     MAX_FOLLOWUPS   = 1
     DIFFICULTY      = "medium"
@@ -77,20 +80,31 @@ async def run_interview() -> None:
     # --- Initialisation ---
     questions = load_questions(Config.CSV_PATH)
 
-    embedder = get_embedder()
-
     print("\nInitialising interview components…")
+    settings    = Settings.from_env()
+    models      = make_chat_models(settings)
+    embeddings  = EmbeddingProvider(settings)
+    chains      = build_chains(models, settings, embeddings)
+    dataset     = DatasetRepository(
+        [
+            {
+                "Id":         q["id"],
+                "Question":   q["question"],
+                "Answer":     q["answer"],
+                "Category":   q["category"],
+                "Difficulty": q["difficulty"],
+            }
+            for q in questions
+        ]
+    )
+    nodes = QuestionGraphNodes(
+        chains=chains,
+        dataset=dataset,
+        settings=settings,
+        rng=random.Random(),
+    )
     conversation    = ConversationManager(total_questions=Config.TOTAL_QUESTIONS)
     flow_controller = FlowController(max_followups_per_topic=Config.MAX_FOLLOWUPS)
-    llm_client      = LLMClient()
-    question_gen    = QuestionGenerator(
-        dataset_questions=questions,
-        llm_client=llm_client,
-    )
-    evaluator       = AnswerEvaluator(
-        embedder=embedder,
-        llm_client=llm_client,
-    )
     print("✓ All components ready\n")
 
     print("=" * 70)
@@ -121,17 +135,44 @@ async def run_interview() -> None:
         is_followup = decision.action == "followup"
 
         if is_followup:
-            question_text, metadata = await question_gen.generate_followup_question(
-                previous_question=last_turn.question,
-                previous_answer=last_turn.answer,
-                evaluation_result=last_turn.evaluation,
-            )
+            followup_state = {
+                "previous_qa_list": [
+                    {"Q": last_turn.question, "A": last_turn.answer}
+                ],
+                "flow": {
+                    "decision": (last_turn.evaluation or {}).get(
+                        "flow_decision", "same_topic"
+                    ),
+                    "score_value": (last_turn.evaluation or {}).get(
+                        "depth_score", 0.5
+                    ),
+                    "remarks": "",
+                    "feedback": (last_turn.evaluation or {}).get("feedback", ""),
+                },
+                "resume_json": {},
+                "difficulty": Config.DIFFICULTY,
+                "category": last_turn.topic,
+            }
+            generated = await nodes.generate_followup(followup_state)
+            question_text, metadata = generated["question"], generated["metadata"]
+            if not is_valid_followup(question_text, last_turn.answer):
+                fallback = nodes.followup_template_fallback(
+                    {**followup_state, "candidate": question_text}
+                )
+                question_text, metadata = fallback["question"], fallback["metadata"]
             topic = last_turn.topic
         else:
-            question_text, metadata = await question_gen.generate_new_topic_question(
-                topics_covered=conversation.get_topics_covered_list(),
-                difficulty=Config.DIFFICULTY,
-            )
+            new_topic_state = {
+                "previous_qa_list": [
+                    {"Q": t.question, "A": t.answer, "category": t.topic}
+                    for t in conversation.history
+                ],
+                "difficulty": Config.DIFFICULTY,
+                "resume_json": {},
+                "category": None,
+            }
+            generated = await nodes.generate_new_topic(new_topic_state)
+            question_text, metadata = generated["question"], generated["metadata"]
             topic = metadata.get("category", "General")
 
         # --- Display question ---
@@ -153,11 +194,13 @@ async def run_interview() -> None:
 
         # --- Single combined evaluation call (score + flow decision) ---
         print("\nEvaluating your answer…")
-        evaluation, flow = await evaluator.evaluate_combined(
-            question=question_text,
-            user_answer=user_answer,
-            reference_answer=metadata.get("reference_answer"),
-            is_followup=is_followup,
+        evaluation, flow = await chains.evaluation.ainvoke(
+            {
+                "question": question_text,
+                "user_answer": user_answer,
+                "reference_answer": metadata.get("reference_answer"),
+                "is_followup": is_followup,
+            }
         )
 
         # Inject flow decision into evaluation so FlowController can use it

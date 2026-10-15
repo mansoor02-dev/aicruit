@@ -1,7 +1,7 @@
 """Application composition and service lifecycle."""
 
-import csv
 import logging
+import random
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator
@@ -9,11 +9,13 @@ from typing import AsyncIterator
 from fastapi import FastAPI
 
 from app.api.routes import router
+from app.config import Settings
+from app.graph.builder import Dependencies, build_question_graph
+from app.llm.chains import build_chains
+from app.llm.embeddings import EmbeddingProvider
+from app.llm.models import make_chat_models
 from app.pipelines.orchestrator import InterviewOrchestrator
-from app.services.answer_evaluator import AnswerEvaluator
-from app.services.embedding import get_embedder
-from app.services.llm_client import LLMClient
-from app.services.question_generator import QuestionGenerator
+from app.services.dataset import DatasetRepository
 
 logging.basicConfig(
     level=logging.INFO,
@@ -26,24 +28,31 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("Initialising interview service")
 
-    llm_client = LLMClient()
+    settings = Settings.from_env()
+    models = make_chat_models(settings)
+    # Embeddings stay lazy: no client is built and no network call is made
+    # here, so OpenRouter-only deployments start cleanly.
+    embeddings = EmbeddingProvider(settings)
+    chains = build_chains(models, settings, embeddings)
     dataset_path = (
         Path(__file__).resolve().parents[1] / "data" / "software_questions.csv"
     )
-    with dataset_path.open(newline="", encoding="latin1") as dataset_file:
-        dataset = list(csv.DictReader(dataset_file))
-    logger.info("Dataset loaded: %s questions", len(dataset))
+    dataset = DatasetRepository.load_csv(dataset_path)
+    graph = build_question_graph(
+        Dependencies(
+            chains=chains,
+            dataset=dataset,
+            settings=settings,
+            rng=random.Random(),
+        )
+    )
 
-    evaluator = AnswerEvaluator(embedder=get_embedder(), llm_client=llm_client)
-    question_generator = QuestionGenerator(
-        dataset_questions=dataset,
-        llm_client=llm_client,
-    )
-    app.state.llm_client = llm_client
-    app.state.orchestrator = InterviewOrchestrator(
-        evaluator=evaluator,
-        question_generator=question_generator,
-    )
+    app.state.settings = settings
+    app.state.models = models
+    app.state.chains = chains
+    app.state.dataset = dataset
+    app.state.graph = graph
+    app.state.orchestrator = InterviewOrchestrator(graph)
     logger.info("Interview service ready")
 
     yield
